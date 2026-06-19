@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_LOCATION } from './lib/locations.js';
+import { reverseGeocode } from './api/geocoding.js';
 import { computeDiagnostics, summarize18h } from './lib/diagnostics.js';
 import { assessHazards, briefing } from './lib/analysis.js';
 import { computeEnsembleDays, confidenceSummary } from './lib/ensemble.js';
@@ -57,8 +58,34 @@ function useAsync(fn, deps, enabled = true) {
 }
 
 export default function App() {
+  // Starts on Lake Tahoe so panels populate instantly, then snaps to the user's
+  // actual location once geolocation resolves (falls back to Tahoe if denied).
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [tick, setTick] = useState(0);
+  const [locating, setLocating] = useState(false);
+
+  const locateMe = useCallback(() => {
+    if (!('geolocation' in navigator)) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = +pos.coords.latitude.toFixed(4);
+        const lon = +pos.coords.longitude.toFixed(4);
+        let name = 'Current location';
+        const rev = await reverseGeocode(lat, lon);
+        if (rev) name = rev;
+        setLocation({ name, lat, lon });
+        setLocating(false);
+      },
+      () => setLocating(false), // denied / unavailable → keep current location
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 },
+    );
+  }, []);
+
+  // Auto-detect current location once on load.
+  useEffect(() => {
+    locateMe();
+  }, [locateMe]);
 
   useEffect(() => {
     const t = setInterval(() => setTick((x) => x + 1), REFRESH_MS);
@@ -119,6 +146,9 @@ export default function App() {
           </div>
         </div>
         <LocationPicker location={location} onChange={setLocation} />
+        <button onClick={locateMe} title="Use my current location" disabled={locating}>
+          {locating ? '📍…' : '📍 My location'}
+        </button>
         <div className="header-spacer" />
         <span className="refresh-note">updated {lastUpdated} · auto-refresh 5 min</span>
         <button onClick={() => setTick((x) => x + 1)}>↻ Refresh</button>
