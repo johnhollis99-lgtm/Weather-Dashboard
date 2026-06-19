@@ -36,6 +36,52 @@ watch the terminal for the actual URL it prints.
 
 Stop everything with `Ctrl+C`.
 
+### One-click launch (Windows)
+Double-click **`start-dashboard.bat`** — it installs deps on first run, starts both
+servers, and opens the browser. Right-click it → *Send to → Desktop (create
+shortcut)* for a desktop icon. (Stays local to this PC.)
+
+---
+
+## Deploy it (one URL on any device) + install as a phone app
+
+In production the **Express server serves the built UI *and* the `/api` proxy on
+one port**, so the whole thing is a single deployable service.
+
+### Deploy to Render (free)
+1. Put this folder on GitHub:
+   ```bash
+   gh repo create wx-dashboard --private --source . --push
+   # or: create an empty repo on github.com, then:
+   #   git remote add origin https://github.com/<you>/wx-dashboard.git && git push -u origin main
+   ```
+2. On [render.com](https://render.com): **New → Blueprint**, pick the repo. It reads
+   `render.yaml` (build `npm install && npm run build`, start `node server/index.js`).
+3. You get a permanent `https://wx-dashboard-xxxx.onrender.com` URL — bookmark it
+   anywhere. (Free tier sleeps after ~15 min idle; first hit then takes ~30 s.)
+
+Locally you can test the exact production artifact with:
+```bash
+npm run build && npm start      # serves UI + API on http://localhost:3001
+```
+
+### Install as a mobile (or desktop) app — PWA
+Once it's at an HTTPS URL, open that URL on your phone:
+- **iPhone (Safari):** Share → **Add to Home Screen**.
+- **Android (Chrome):** menu → **Install app** (or the install prompt).
+- **Desktop (Chrome/Edge):** install icon in the address bar.
+
+You get a full-screen home-screen app with the radar icon. The service worker
+caches the app shell for instant launch but **always fetches live weather data
+fresh** (never serves stale obs/radar). Regenerate icons with
+`node scripts/gen-icons.mjs`.
+
+> Security note: a public URL exposes the proxy routes. They're all whitelisted
+> (no open proxy), but if you want it private, deploy with Render's access
+> controls or add basic auth.
+
+---
+
 ---
 
 ## Prerequisites
