@@ -1,0 +1,26 @@
+{
+  "name": "weather-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Local meteorological dashboard — NWS, Open-Meteo, RainViewer, GOES, SPC, UWyo soundings.",
+  "scripts": {
+    "dev": "concurrently -n proxy,web -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "node server/index.js",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "leaflet": "^1.9.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "vite": "^6.0.7"
+  }
+}

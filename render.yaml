@@ -1,0 +1,14 @@
+# Render Blueprint — one free web service that builds the frontend and runs the
+# Express server (which serves both the built UI and the /api proxy routes).
+# Deploy: push this repo to GitHub, then in Render: New → Blueprint → pick the repo.
+services:
+  - type: web
+    name: wx-dashboard
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: node server/index.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
