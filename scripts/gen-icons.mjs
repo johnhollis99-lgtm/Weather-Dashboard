@@ -95,3 +95,21 @@ for (const [name, size, ringScale] of targets) {
   writeFileSync(path.join(pub, name), drawIcon(size, { ringScale }));
   console.log('wrote', name, size + 'px');
 }
+
+// Windows .ico (wraps a 256px PNG) for the desktop shortcut.
+function pngToIco(png) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // type = icon
+  header.writeUInt16LE(1, 4); // image count
+  const entry = Buffer.alloc(16);
+  entry[0] = 0; // width 256 (0 = 256)
+  entry[1] = 0; // height 256
+  entry.writeUInt16LE(1, 4); // color planes
+  entry.writeUInt16LE(32, 6); // bits per pixel
+  entry.writeUInt32LE(png.length, 8); // image size
+  entry.writeUInt32LE(6 + 16, 12); // offset to image data
+  return Buffer.concat([header, entry, png]);
+}
+writeFileSync(path.join(pub, 'icon.ico'), pngToIco(drawIcon(256, { ringScale: 0.46 })));
+console.log('wrote icon.ico 256px');
