@@ -1,5 +1,5 @@
 import Panel, { ResourceState } from './Panel.jsx';
-import { fmt } from '../lib/units.js';
+import { fmt, mmToIn } from '../lib/units.js';
 import { computeEnsembleDays } from '../lib/ensemble.js';
 
 // Forecast confidence from the GFS ensemble: daily precip spread across members.
@@ -14,7 +14,7 @@ export default function Confidence({ ensemble }) {
     body = (
       <>
         <div className="obs-note" style={{ marginBottom: 10 }}>
-          GFS ensemble · {n} members · daily precip spread (mm)
+          GFS ensemble · {n} members · daily precip spread (in)
         </div>
         {days.map((d) => (
           <div className="conf-day" key={d.day}>
@@ -22,7 +22,7 @@ export default function Confidence({ ensemble }) {
               <span>{new Date(d.day + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}</span>
               <span>
                 <span className={`conf-tag ${d.conf}`}>{d.conf.toUpperCase()} confidence</span>{' '}
-                {fmt(d.mean, 1)} mm avg
+                {fmt(mmToIn(d.mean), 2)}″ avg
               </span>
             </div>
             <div className="conf-bar-track">
@@ -32,7 +32,7 @@ export default function Confidence({ ensemble }) {
               />
               <div className="conf-bar-mean" style={{ left: `${(d.mean / globalMax) * 100}%` }} />
             </div>
-            <div className="obs-note">range {fmt(d.min, 1)}–{fmt(d.max, 1)} mm</div>
+            <div className="obs-note">range {fmt(mmToIn(d.min), 2)}–{fmt(mmToIn(d.max), 2)}″</div>
           </div>
         ))}
       </>

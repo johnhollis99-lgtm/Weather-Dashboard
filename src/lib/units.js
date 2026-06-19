@@ -1,12 +1,21 @@
 // Small unit + formatting helpers.
 
 export const cToF = (c) => (c == null ? null : (c * 9) / 5 + 32);
+export const deltaCToF = (c) => (c == null ? null : c * 1.8); // temperature DIFFERENCE °C → °F
 export const kmhToMph = (k) => (k == null ? null : k * 0.621371);
 export const mToFt = (m) => (m == null ? null : m * 3.28084);
+export const mmToIn = (mm) => (mm == null ? null : mm / 25.4);
+export const cmToIn = (cm) => (cm == null ? null : cm / 2.54);
 
 export function fmt(n, digits = 0) {
   if (n == null || Number.isNaN(n)) return '—';
   return Number(n).toFixed(digits);
+}
+
+// Rounded feet with thousands separators, e.g. "18,500". Null-safe.
+export function feet(m) {
+  if (m == null) return null;
+  return Math.round(m * 3.28084).toLocaleString();
 }
 
 // Temperature, dual unit, e.g. "72°F (22°C)".

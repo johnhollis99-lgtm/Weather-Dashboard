@@ -5,6 +5,11 @@
 // restatement of the NWS zone forecast. Each rule emits a "finding" with a
 // severity level; a synthesis paragraph ties them together (what's happening,
 // what's next, why).
+//
+// Display strings are imperial (°F, ft, in); the threshold logic stays in SI.
+// (CAPE/CIN remain J/kg and lapse rates °C/km — no standard imperial form.)
+
+import { deltaCToF, feet, mmToIn } from './units.js';
 
 const LEVELS = { good: 'good', info: 'info', watch: 'watch', warn: 'warn' };
 
@@ -122,11 +127,11 @@ function moisture(pwatIn, dewpointDepression) {
   }
   if (dewpointDepression != null) {
     if (dewpointDepression >= 15) {
-      parts.push(`Surface dewpoint depression ${dewpointDepression.toFixed(0)} °C — dry low levels (high cloud bases, strong sub-cloud evaporation; gusty/dry storms and fire concern).`);
+      parts.push(`Surface dewpoint depression ${deltaCToF(dewpointDepression).toFixed(0)} °F — dry low levels (high cloud bases, strong sub-cloud evaporation; gusty/dry storms and fire concern).`);
     } else if (dewpointDepression <= 3) {
-      parts.push(`Surface dewpoint depression ${dewpointDepression.toFixed(0)} °C — near-saturated low levels (fog/low stratus or steady precip favored).`);
+      parts.push(`Surface dewpoint depression ${deltaCToF(dewpointDepression).toFixed(0)} °F — near-saturated low levels (fog/low stratus or steady precip favored).`);
     } else {
-      parts.push(`Surface dewpoint depression ${dewpointDepression.toFixed(0)} °C.`);
+      parts.push(`Surface dewpoint depression ${deltaCToF(dewpointDepression).toFixed(0)} °F.`);
     }
   }
   return f('Moisture', level, 'Moisture (PWAT / dewpoint depression)', parts.join(' '));
@@ -138,12 +143,12 @@ function mixing(blHeight, mixingHeight) {
   let level = LEVELS.info;
   let desc;
   if (h < 500) {
-    desc = `Boundary-layer / mixing height ~${Math.round(h)} m — shallow; poor vertical mixing, pollutants and smoke stay trapped near the surface.`;
+    desc = `Boundary-layer / mixing height ~${feet(h)} ft — shallow; poor vertical mixing, pollutants and smoke stay trapped near the surface.`;
     level = LEVELS.watch;
   } else if (h < 1500) {
-    desc = `Boundary-layer / mixing height ~${Math.round(h)} m — moderate daytime mixing.`;
+    desc = `Boundary-layer / mixing height ~${feet(h)} ft — moderate daytime mixing.`;
   } else {
-    desc = `Boundary-layer / mixing height ~${Math.round(h)} m — deep mixing; efficient vertical dispersion.`;
+    desc = `Boundary-layer / mixing height ~${feet(h)} ft — deep mixing; efficient vertical dispersion.`;
     level = LEVELS.good;
   }
   return f('Mixing', level, 'Boundary-layer mixing', desc);
@@ -185,7 +190,7 @@ function fireWeather(haines, dewpointDepression, ventilationRate) {
     level = LEVELS.warn;
   }
   if (dewpointDepression != null && dewpointDepression >= 15) {
-    desc += ` Combined with dry low levels (DD ${dewpointDepression.toFixed(0)} °C), expect rapid fuel drying.`;
+    desc += ` Combined with dry low levels (DD ${deltaCToF(dewpointDepression).toFixed(0)} °F), expect rapid fuel drying.`;
   }
   return f('Fire weather', level, 'Fire weather (Haines)', desc);
 }
@@ -323,9 +328,9 @@ export function assessHazards(diag, sum) {
     }
     const reason =
       `${thunder ? 'thunder potential present' : 'little thunder potential'}; ` +
-      `${dd != null ? `dewpoint depression ${dd.toFixed(0)}°C` : 'sub-cloud moisture unknown'}` +
+      `${dd != null ? `dewpoint depression ${deltaCToF(dd).toFixed(0)}°F` : 'sub-cloud moisture unknown'}` +
       `${pwatIn != null ? `, PWAT ${pwatIn.toFixed(2)}″` : ''}` +
-      `${precip != null ? `, ~${precip.toFixed(1)} mm rain expected` : ''}.`;
+      `${precip != null ? `, ~${mmToIn(precip).toFixed(2)}″ rain expected` : ''}.`;
     out.push({ hazard: 'Dry lightning', level, pct, reason });
   }
 
@@ -401,7 +406,7 @@ export function briefing({ diag, hazards, sum, confidence, obs, location, alerts
   // Outlook for the next 18–24h.
   const o = [];
   if (s.maxPoP != null) o.push(`peak precip probability ${Math.round(s.maxPoP)}%`);
-  if (s.totalPrecipMm != null && s.totalPrecipMm >= 0.5) o.push(`~${s.totalPrecipMm.toFixed(1)} mm total QPF`);
+  if (s.totalPrecipMm != null && s.totalPrecipMm >= 0.5) o.push(`~${mmToIn(s.totalPrecipMm).toFixed(2)}″ total QPF`);
   if (s.totalSnowCm != null && s.totalSnowCm >= 0.3) o.push(`~${(s.totalSnowCm / 2.54).toFixed(1)}″ snow`);
   if (s.maxGustKmh != null) o.push(`gusts to ${Math.round(MPH(s.maxGustKmh))} mph`);
   parts.outlook =

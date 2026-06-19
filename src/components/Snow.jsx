@@ -38,8 +38,8 @@ export default function Snow({ gfs, grid, location }) {
     body = (
       <>
         <div className="diag-grid">
-          <Metric label="Snow next 18h" value={fmt(snow18cm / 2.54, 1)} unit="in" sub={`${fmt(snow18cm, 1)} cm`} />
-          <Metric label="Current snow depth" value={depthM != null ? fmt(depthM * 39.37, 1) : null} unit="in" sub={depthM != null ? `${fmt(depthM * 100, 0)} cm` : ''} />
+          <Metric label="Snow next 18h" value={fmt(snow18cm / 2.54, 1)} unit="in" />
+          <Metric label="Current snow depth" value={depthM != null ? fmt(depthM * 39.37, 1) : null} unit="in" />
           <Metric label="Snow level" value={snowLevelFt != null ? Math.round(snowLevelFt).toLocaleString() : null} unit="ft" sub={snowLevelSrc} />
           <Metric label="Freezing level" value={fzM != null ? Math.round(mToFt(fzM)).toLocaleString() : null} unit="ft" />
           <Metric label="NWS snowfall (period)" value={snowAmt?.value != null ? fmt(snowAmt.value / 25.4, 1) : null} unit="in" />
@@ -55,7 +55,6 @@ export default function Snow({ gfs, grid, location }) {
                   label={new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
                   value={fmt(cm / 2.54, 1)}
                   unit="in"
-                  sub={`${fmt(cm, 1)} cm`}
                 />
               ))}
             </div>

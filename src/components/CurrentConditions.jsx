@@ -1,5 +1,7 @@
 import Panel, { ResourceState } from './Panel.jsx';
-import { tempBoth, fmt, windDir, kmhToMph, localTime } from '../lib/units.js';
+import { cToF, fmt, windDir, kmhToMph, localTime } from '../lib/units.js';
+
+const degF = (c) => (c == null ? '—' : `${fmt(cToF(c))}°F`);
 
 // Current conditions. Headline number is the ACTUAL OBSERVED temperature from
 // the nearest station's latest observation — not the hour-0 forecast.
@@ -28,8 +30,8 @@ function Body({ o, cond }) {
         </div>
       </div>
       <div className="cc-grid">
-        <Row k="Temperature" v={tempBoth(o.temperatureC)} />
-        <Row k="Dewpoint" v={tempBoth(o.dewpointC)} />
+        <Row k="Temperature" v={degF(o.temperatureC)} />
+        <Row k="Dewpoint" v={degF(o.dewpointC)} />
         <Row k="Humidity" v={o.humidity != null ? `${fmt(o.humidity)}%` : '—'} />
         <Row
           k="Wind"
