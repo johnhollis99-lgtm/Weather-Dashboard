@@ -230,6 +230,16 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
   // never collides with the wind-barb column.
   const labelSide = (mx) => (mx > xR - 110 ? { x: mx - 8, anchor: 'end' } : { x: mx + 8, anchor: 'start' });
 
+  // Anchor for an in-region value callout: a point `frac` of the way (in log-p)
+  // up the layer, horizontally centered between the parcel and environment.
+  const regionAnchor = (pHi, pLo, frac) => {
+    const pMid = pHi * Math.pow(pLo / pHi, frac);
+    const x = (xOf(parcelTempAt(path, pMid), pMid) + xOf(interpByPressure(profile, pMid, 'temp'), pMid)) / 2;
+    return { x, y: yOf(pMid) };
+  };
+  const capeLabel = a.lfc && a.el && a.cape > 50 ? regionAnchor(a.lfc.pressure, a.el.pressure, 0.5) : null;
+  const cinLabel = a.lfc && a.cin < -25 ? regionAnchor(pSfc, a.lfc.pressure, 0.3) : null;
+
   // ---- cap inversion band ----
   const capBand = a.cap
     ? { yTop: yOf(a.cap.topPressure), yBot: yOf(a.cap.basePressure) }
@@ -339,15 +349,23 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
           ))}
         </g>
 
-        {/* isobars + pressure labels */}
-        {PRESSURE_LINES.map((p) => (
-          <g key={`ib${p}`}>
-            <line x1={xL} y1={yOf(p)} x2={xR} y2={yOf(p)} className="skt-isobar" />
-            <text x={xL - 6} y={yOf(p) + 3} className="skt-axis" textAnchor="end">
-              {p}
-            </text>
-          </g>
-        ))}
+        {/* isobars + pressure labels (+ approximate height for this sounding) */}
+        {PRESSURE_LINES.map((p) => {
+          const z = p <= pSfc ? interpByPressure(profile, p, 'height') : null;
+          return (
+            <g key={`ib${p}`}>
+              <line x1={xL} y1={yOf(p)} x2={xR} y2={yOf(p)} className="skt-isobar" />
+              <text x={xL - 6} y={yOf(p) + 3} className="skt-axis" textAnchor="end">
+                {p}
+              </text>
+              {z != null && (
+                <text x={xL + 5} y={yOf(p) - 2.5} className="skt-height-axis" textAnchor="start">
+                  ≈ {dp('height', z)}
+                </text>
+              )}
+            </g>
+          );
+        })}
         {/* isotherm labels along the bottom */}
         {ISOTHERMS.map((t) => (
           <text key={`itl${t}`} x={xBase(t)} y={yB + 15} className="skt-axis" textAnchor="middle">
@@ -355,15 +373,15 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
           </text>
         ))}
         <text x={(xL + xR) / 2} y={yB + 30} className="skt-axis-title" textAnchor="middle">
-          Temperature (°C, skewed) — pressure (hPa) at left
+          Temperature (°C, skewed) · pressure (hPa) + approx. height (MSL) at left
         </text>
 
         {/* cap inversion band */}
         {capBand && (
           <g style={{ opacity: dim('cap') }}>
             <rect x={xL} y={capBand.yTop} width={PW} height={capBand.yBot - capBand.yTop} className="skt-cap-band" />
-            <text x={xR - 6} y={capBand.yTop - 4} className="skt-anno cap" textAnchor="end">
-              cap +{a.cap.strength.toFixed(1)}°C
+            <text x={xL + 8} y={capBand.yTop - 5} className="skt-callout cap" textAnchor="start">
+              Capping inversion — warm lid (+{dp('tempDelta', a.cap.strength)})
             </text>
           </g>
         )}
@@ -381,26 +399,47 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
           <path d={tempCurve} className="skt-temp" />
         </g>
 
-        {/* LCL / LFC / EL markers */}
+        {/* LCL / LFC / EL plain-language callouts */}
         <g style={{ opacity: dim('lcl') }}>
           <circle cx={lclM.x} cy={lclM.y} r="4.5" className="skt-dot lcl" />
-          <text x={labelSide(lclM.x).x} y={lclM.y + 4} textAnchor={labelSide(lclM.x).anchor} className="skt-anno lcl">
-            LCL · cloud base
+          <text x={labelSide(lclM.x).x} y={lclM.y + 3} textAnchor={labelSide(lclM.x).anchor} className="skt-callout lcl">
+            <tspan x={labelSide(lclM.x).x} dy="-3">Cloud base</tspan>
+            <tspan x={labelSide(lclM.x).x} dy="11" className="sub">~{dp('height', a.lcl.heightAGL)} AGL</tspan>
           </text>
         </g>
         {lfcM && (
           <g style={{ opacity: dim('cape') }}>
             <circle cx={lfcM.x} cy={lfcM.y} r="4.5" className="skt-dot lfc" />
-            <text x={labelSide(lfcM.x).x} y={lfcM.y + 4} textAnchor={labelSide(lfcM.x).anchor} className="skt-anno lfc">
-              LFC
+            <text x={labelSide(lfcM.x).x} y={lfcM.y + 3} textAnchor={labelSide(lfcM.x).anchor} className="skt-callout lfc">
+              <tspan x={labelSide(lfcM.x).x} dy="-3">Storms take off</tspan>
+              <tspan x={labelSide(lfcM.x).x} dy="11" className="sub">here (LFC)</tspan>
             </text>
           </g>
         )}
         {elM && (
           <g style={{ opacity: dim('cape') }}>
             <circle cx={elM.x} cy={elM.y} r="4.5" className="skt-dot el" />
-            <text x={labelSide(elM.x).x} y={elM.y + 4} textAnchor={labelSide(elM.x).anchor} className="skt-anno el">
-              EL · storm top
+            <text x={labelSide(elM.x).x} y={elM.y + 3} textAnchor={labelSide(elM.x).anchor} className="skt-callout el">
+              <tspan x={labelSide(elM.x).x} dy="-3">Storm top</tspan>
+              <tspan x={labelSide(elM.x).x} dy="11" className="sub">~{dp('height', a.el.height)}</tspan>
+            </text>
+          </g>
+        )}
+
+        {/* in-region CAPE / CIN value callouts */}
+        {capeLabel && (
+          <g style={{ opacity: dim('cape') }}>
+            <text x={capeLabel.x} y={capeLabel.y} textAnchor="middle" className="skt-callout cape">
+              <tspan x={capeLabel.x}>CAPE {dp('cape', a.cape)}</tspan>
+              <tspan x={capeLabel.x} dy="11" className="sub">the storm's fuel</tspan>
+            </text>
+          </g>
+        )}
+        {cinLabel && (
+          <g style={{ opacity: dim('cape') }}>
+            <text x={cinLabel.x} y={cinLabel.y} textAnchor="middle" className="skt-callout cin">
+              <tspan x={cinLabel.x}>CIN {dp('cin', a.cin)}</tspan>
+              <tspan x={cinLabel.x} dy="11" className="sub">energy blocking storms</tspan>
             </text>
           </g>
         )}
