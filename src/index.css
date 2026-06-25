@@ -331,3 +331,139 @@ button.active { background: var(--accent); color: #05121b; border-color: var(--a
 .footer strong { color: var(--text-dim); }
 .disclaimer { color: var(--watch); margin-top: 8px; }
 
+/* ---- Diagnostic Skew-T (DiagnosticSounding) ---------------------------------
+   Component-scoped tokens so the chart reads on BOTH dark and light surfaces.
+   The chart proper uses only --skt-* vars; the light override re-themes them. */
+.dsounding {
+  --skt-surface: #0a1118;
+  --skt-text: var(--text);
+  --skt-dim: var(--text-dim);
+  --skt-faint: #6f8190; /* AA-legible on the dark chart surface */
+  --skt-border: var(--border);
+  --skt-card: var(--bg-panel-2);
+  --skt-temp: #ef6b5a;
+  --skt-dew: #46c08a;
+  --skt-parcel: #f0b429;
+  --skt-cape: rgba(239, 107, 90, 0.22);
+  --skt-cin: rgba(79, 150, 247, 0.20);
+  --skt-capband: rgba(224, 179, 65, 0.16);
+  --skt-capborder: #e0b341;
+  --skt-grid: rgba(230, 237, 243, 0.10);
+  --skt-zero: rgba(79, 195, 247, 0.40);
+  --skt-dryad: rgba(239, 150, 90, 0.13);
+  --skt-moistad: rgba(70, 192, 138, 0.18);
+  --skt-mixr: rgba(127, 208, 255, 0.16);
+  --skt-barb: var(--text-dim);
+  --skt-shearhi: rgba(79, 195, 247, 0.10);
+  --skt-lcl: #46c08a;
+  --skt-lfc: #f0b429;
+  --skt-el: #b07ce0;
+  color: var(--skt-text);
+}
+.dsounding[data-theme='light'] {
+  --skt-surface: #ffffff;
+  --skt-text: #1a2530;
+  --skt-dim: #5a6b78;
+  --skt-faint: #5a6b78; /* AA-legible on the light chart surface */
+  --skt-border: #d4dde4;
+  --skt-card: #f3f6f8;
+  --skt-temp: #d23b22;
+  --skt-dew: #138a5a;
+  --skt-parcel: #c77f00;
+  --skt-cape: rgba(210, 59, 34, 0.18);
+  --skt-cin: rgba(40, 110, 210, 0.16);
+  --skt-capband: rgba(200, 150, 20, 0.22);
+  --skt-capborder: #b8860b;
+  --skt-grid: rgba(20, 40, 60, 0.12);
+  --skt-zero: rgba(30, 120, 180, 0.45);
+  --skt-dryad: rgba(200, 90, 40, 0.14);
+  --skt-moistad: rgba(20, 138, 90, 0.16);
+  --skt-mixr: rgba(40, 120, 200, 0.16);
+  --skt-barb: #4a5a66;
+  --skt-shearhi: rgba(40, 120, 200, 0.10);
+  --skt-lcl: #138a5a;
+  --skt-lfc: #c77f00;
+  --skt-el: #8a4fc0;
+  background: #fbfdfe;
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.skt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.skt-chip {
+  background: var(--skt-card);
+  color: var(--skt-dim);
+  border: 1px solid var(--skt-border);
+  border-radius: 14px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.skt-chip:hover { border-color: var(--accent); color: var(--skt-text); }
+.skt-chip.active { background: var(--accent); color: #05121b; border-color: var(--accent); font-weight: 600; }
+
+.skt-svg { display: block; width: 100%; height: auto; }
+.skt-frame { fill: var(--skt-surface); stroke: var(--skt-border); stroke-width: 1; }
+.skt-isobar { stroke: var(--skt-grid); stroke-width: 1; }
+.skt-isotherm { stroke: var(--skt-grid); stroke-width: 1; }
+.skt-isotherm.zero { stroke: var(--skt-zero); stroke-width: 1.3; }
+.skt-dryad { fill: none; stroke: var(--skt-dryad); stroke-width: 1; }
+.skt-moistad { fill: none; stroke: var(--skt-moistad); stroke-width: 1; }
+.skt-mixr { fill: none; stroke: var(--skt-mixr); stroke-width: 1; stroke-dasharray: 2 3; }
+.skt-axis { fill: var(--skt-dim); font-size: 11px; } /* primary chart labels → higher-contrast token */
+.skt-axis-title { fill: var(--skt-dim); font-size: 11px; }
+.skt-temp { fill: none; stroke: var(--skt-temp); stroke-width: 2.6; stroke-linejoin: round; }
+.skt-dew { fill: none; stroke: var(--skt-dew); stroke-width: 2.6; stroke-linejoin: round; }
+.skt-parcel { fill: none; stroke: var(--skt-parcel); stroke-width: 2; stroke-dasharray: 6 4; }
+.skt-cape { fill: var(--skt-cape); stroke: none; }
+.skt-cin { fill: var(--skt-cin); stroke: none; }
+.skt-cap-band { fill: var(--skt-capband); stroke: var(--skt-capborder); stroke-width: 1; stroke-dasharray: 4 3; }
+.skt-shear-hi { fill: var(--skt-shearhi); stroke: none; }
+.skt-dot { stroke: var(--skt-surface); stroke-width: 1.5; }
+.skt-dot.lcl { fill: var(--skt-lcl); }
+.skt-dot.lfc { fill: var(--skt-lfc); }
+.skt-dot.el { fill: var(--skt-el); }
+.skt-anno { font-size: 11px; font-weight: 600; }
+.skt-anno.lcl { fill: var(--skt-lcl); }
+.skt-anno.lfc { fill: var(--skt-lfc); }
+.skt-anno.el { fill: var(--skt-el); }
+.skt-anno.cap { fill: var(--skt-capborder); }
+.skt-anno.shear { fill: var(--skt-dim); }
+
+.skt-narrative {
+  background: var(--skt-card);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 12px 0;
+  color: var(--skt-text);
+}
+.skt-readout { margin-top: 4px; }
+.dsounding .metric { background: var(--skt-card); border-color: var(--skt-border); }
+.dsounding .metric .m-label { color: var(--skt-dim); }
+.dsounding .metric .m-value { color: var(--skt-text); }
+.dsounding .metric .m-unit { color: var(--skt-faint); }
+.dsounding .diag-section-title { color: var(--skt-faint); }
+
+.skt-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12px; color: var(--skt-dim); }
+.skt-legend i.sw { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.skt-legend i.temp { background: var(--skt-temp); }
+.skt-legend i.dew { background: var(--skt-dew); }
+.skt-legend i.parcel { background: var(--skt-parcel); }
+.skt-legend i.cape { background: var(--skt-cape); height: 10px; }
+.skt-legend i.cin { background: var(--skt-cin); height: 10px; }
+.skt-legend i.capband { background: var(--skt-capband); height: 10px; border: 1px solid var(--skt-capborder); }
+
+.skt-badge {
+  display: inline-block;
+  background: var(--watch-bg);
+  color: var(--watch);
+  border: 1px solid var(--watch);
+  border-radius: 4px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+}

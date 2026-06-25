@@ -33,6 +33,7 @@ import AirQuality from './components/AirQuality.jsx';
 import Confidence from './components/Confidence.jsx';
 import Roads from './components/Roads.jsx';
 import UpperAir from './components/UpperAir.jsx';
+import DiagnosticSoundingPanel from './components/DiagnosticSoundingPanel.jsx';
 import ExtendedForecast from './components/ExtendedForecast.jsx';
 
 const REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
@@ -215,6 +216,10 @@ export default function App() {
 
         <div className="col-12">
           <Roads location={location} />
+        </div>
+
+        <div className="col-12">
+          <DiagnosticSoundingPanel location={location} refreshKey={tick} />
         </div>
 
         <div className="col-12">
