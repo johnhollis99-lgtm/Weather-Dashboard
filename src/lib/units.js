@@ -1,8 +1,11 @@
 // Small unit + formatting helpers.
 
 export const cToF = (c) => (c == null ? null : (c * 9) / 5 + 32);
+export const fToC = (f) => (f == null ? null : ((f - 32) * 5) / 9);
 export const deltaCToF = (c) => (c == null ? null : c * 1.8); // temperature DIFFERENCE °C → °F
 export const kmhToMph = (k) => (k == null ? null : k * 0.621371);
+export const kmhToMs = (k) => (k == null ? null : k / 3.6);
+export const msToKt = (ms) => (ms == null ? null : ms * 1.94384);
 export const mToFt = (m) => (m == null ? null : m * 3.28084);
 export const mmToIn = (mm) => (mm == null ? null : mm / 25.4);
 export const cmToIn = (cm) => (cm == null ? null : cm / 2.54);
@@ -48,4 +51,103 @@ export function localTime(iso, opts = { hour: 'numeric' }) {
   } catch {
     return '';
   }
+}
+
+// ── Per-quantity display registry ─────────────────────────────────────────────
+// Policy: ALL physics is computed in SI upstream (°C, m, hPa, J/kg, m/s, mm).
+// This registry is DISPLAY-ONLY — switching `system` ('imperial' | 'metric')
+// changes formatting, never recomputes. Each quantity declares, per system, how
+// to convert the SI value and how to round/label it.
+//
+//   `round`  — snap to this step before formatting (e.g. 100 ft, 10 J/kg)
+//   `digits` — decimal places after rounding
+//   `suffix` — unit label, joined to the number with a space ("5,000 ft", "72 °F")
+export const SYSTEMS = ['imperial', 'metric'];
+export const DEFAULT_SYSTEM = 'imperial';
+
+const id = (x) => x;
+
+const REGISTRY = {
+  // Temperature / dewpoint: internal °C. Whole degrees, no space (32°F / 0°C).
+  temperature: {
+    imperial: { to: cToF, digits: 0, suffix: '°F' },
+    metric: { to: id, digits: 0, suffix: '°C' },
+  },
+  // A temperature DIFFERENCE (e.g. dewpoint depression): scales by 9/5, no +32.
+  tempDelta: {
+    imperial: { to: deltaCToF, digits: 1, suffix: '°F' },
+    metric: { to: id, digits: 1, suffix: '°C' },
+  },
+  // Heights (LCL/LFC/EL, mixing/BL/freezing, geopotential): internal m.
+  // Imperial → ft to nearest 100; metric → m to nearest 10.
+  height: {
+    imperial: { to: mToFt, round: 100, digits: 0, suffix: 'ft' },
+    metric: { to: id, round: 10, digits: 0, suffix: 'm' },
+  },
+  // Same height, expressed in thousands for an axis label (1 decimal).
+  heightKft: {
+    imperial: { to: (m) => mToFt(m) / 1000, digits: 1, suffix: 'kft' },
+    metric: { to: (m) => m / 1000, digits: 1, suffix: 'km' },
+  },
+  // Lapse rate: internal °C/km. Imperial → °F per 1000 ft.
+  lapseRate: {
+    imperial: { to: (r) => (r * 9) / 5 / 3.28084, digits: 1, suffix: '°F/1000 ft' },
+    metric: { to: id, digits: 1, suffix: '°C/km' },
+  },
+  // Precipitable water: internal mm. Imperial → inches (2 dp); metric mm (1 dp).
+  pwat: {
+    imperial: { to: mmToIn, digits: 2, suffix: 'in' },
+    metric: { to: id, digits: 1, suffix: 'mm' },
+  },
+  // Wind speed / shear: internal m/s. Imperial → kt (whole); metric → m/s (1 dp).
+  wind: {
+    imperial: { to: msToKt, digits: 0, suffix: 'kt' },
+    metric: { to: id, digits: 1, suffix: 'm/s' },
+  },
+  // ── Identical in both systems (meteorological convention) ──
+  // Pressure: hPa (== mb), never converted.
+  pressure: {
+    imperial: { to: id, digits: 0, suffix: 'hPa' },
+    metric: { to: id, digits: 0, suffix: 'hPa' },
+  },
+  // CAPE / CIN: J/kg to nearest 10, identical in both systems.
+  cape: {
+    imperial: { to: id, round: 10, digits: 0, suffix: 'J/kg' },
+    metric: { to: id, round: 10, digits: 0, suffix: 'J/kg' },
+  },
+  cin: {
+    imperial: { to: id, round: 10, digits: 0, suffix: 'J/kg' },
+    metric: { to: id, round: 10, digits: 0, suffix: 'J/kg' },
+  },
+  // Lifted / Showalter index: as-is (°C-based but shown as a bare number, 1 dp).
+  index: {
+    imperial: { to: id, digits: 1, suffix: '' },
+    metric: { to: id, digits: 1, suffix: '' },
+  },
+};
+
+function formatNumber(value, { round = null, digits = 0 }) {
+  let v = value;
+  if (round) v = Math.round(v / round) * round;
+  return v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+// Format an SI value for display, returning the pieces so the UI can style the
+// unit separately. Null-safe → { num: '—', unit: '', text: '—' }.
+export function displayParts(quantityKey, siValue, system = DEFAULT_SYSTEM) {
+  const quantity = REGISTRY[quantityKey];
+  if (!quantity) throw new Error(`Unknown quantity key: ${quantityKey}`);
+  const rule = quantity[system] || quantity[DEFAULT_SYSTEM];
+  if (siValue == null || Number.isNaN(siValue)) return { num: '—', unit: '', text: '—' };
+  const num = formatNumber(rule.to(siValue), rule);
+  const unit = rule.suffix || '';
+  return { num, unit, text: unit ? `${num} ${unit}` : num };
+}
+
+// Format an SI value to a single display string, e.g.
+//   display('height', 1524, 'imperial') → "5,000 ft"
+//   display('cape', 2400, 'imperial')   → "2,400 J/kg"
+//   display('temperature', 0, 'metric') → "0°C"
+export function display(quantityKey, siValue, system = DEFAULT_SYSTEM) {
+  return displayParts(quantityKey, siValue, system).text;
 }

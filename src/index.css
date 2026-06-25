@@ -197,6 +197,38 @@ button.active { background: var(--accent); color: #05121b; border-color: var(--a
 .metric .m-value { font-size: 18px; font-weight: 600; margin-top: 2px; }
 .metric .m-unit { font-size: 12px; color: var(--text-faint); font-weight: 400; }
 .metric.na .m-value { color: var(--text-faint); font-size: 13px; font-weight: 400; }
+.metric .m-info { color: var(--text-faint); cursor: help; font-size: 10px; vertical-align: super; }
+
+/* One-time note: CAPE/CIN/pressure are J/kg & hPa in both unit systems. */
+.cape-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 4px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+}
+.cape-tip button { flex: 0 0 auto; padding: 3px 10px; font-size: 12px; }
+
+/* Header imperial/metric switch — a compact segmented control. */
+.unit-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.unit-toggle button {
+  border: 0;
+  border-radius: 0;
+  padding: 5px 10px;
+  font-size: 12px;
+  background: var(--bg-panel-2);
+  color: var(--text-dim);
+}
+.unit-toggle button + button { border-left: 1px solid var(--border); }
+.unit-toggle button:hover { color: var(--text); }
+.unit-toggle button.active { background: var(--accent); color: #05121b; font-weight: 600; }
 
 /* ---- Analysis ---- */
 .synthesis {
@@ -298,3 +330,4 @@ button.active { background: var(--accent); color: #05121b; border-color: var(--a
 .footer { padding: 20px 18px 40px; color: var(--text-faint); font-size: 12px; line-height: 1.6; border-top: 1px solid var(--border); margin-top: 20px; }
 .footer strong { color: var(--text-dim); }
 .disclaimer { color: var(--watch); margin-top: 8px; }
+

@@ -15,6 +15,7 @@ import {
 import { getGfs, getAirQuality, getEnsemble } from './api/openMeteo.js';
 
 import LocationPicker from './components/LocationPicker.jsx';
+import UnitToggle from './components/UnitToggle.jsx';
 import AlertsBanner from './components/AlertsBanner.jsx';
 import Summary from './components/Summary.jsx';
 import CurrentConditions from './components/CurrentConditions.jsx';
@@ -150,6 +151,7 @@ export default function App() {
           {locating ? '📍…' : '📍 My location'}
         </button>
         <div className="header-spacer" />
+        <UnitToggle />
         <span className="refresh-note">updated {lastUpdated} · auto-refresh 5 min</span>
         <button onClick={() => setTick((x) => x + 1)}>↻ Refresh</button>
       </header>
