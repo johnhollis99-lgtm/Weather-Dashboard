@@ -22,8 +22,8 @@ fetched directly from the browser. All data sources are **keyless/public**.
 
 ## Architecture
 ```
-browser ──► NWS, Open-Meteo, RainViewer, GOES CDN, IEM tiles   (CORS-OK, direct)
-   └──► /api/* ──► Express proxy ──► SPC, UWyo, NDOT 511, Tropical Tidbits
+browser ──► NWS, Open-Meteo, RainViewer, GOES CDN, IEM tiles, Windy embeds   (CORS-OK / framable, direct)
+   └──► /api/* ──► Express proxy ──► SPC, UWyo, NDOT 511, Zoom Earth, Tropical Tidbits
 ```
 - Direct browser APIs: `src/api/*.js` (nws, openMeteo, geocoding, rainviewer)
 - Proxy + inline-image/embeds: `server/index.js`
@@ -39,6 +39,7 @@ browser ──► NWS, Open-Meteo, RainViewer, GOES CDN, IEM tiles   (CORS-OK, d
 - `/api/spc` — SPC mesoanalysis param image
 - `/api/spc-outlook?img=day1cat|day2cat|day1fire|day2fire` — SPC outlooks
 - `/api/ndot` — NDOT 511 reverse proxy (strips X-Frame-Options, injects `<base>`)
+- `/api/zoomearth` — Zoom Earth reverse proxy (same XFO-strip + `<base>` trick; live satellite + tropical storm/hurricane tracking. View steered client-side via iframe URL hash `#view=lat,lon,zoomz`)
 - `/api/model`, `/api/model-info?model=gfs|nam|ecmwf` — Tropical Tidbits model maps (Referer + latest-run resolution; whitelisted)
 
 ## Upstream gotchas (already handled — keep these in mind)
@@ -49,11 +50,14 @@ browser ──► NWS, Open-Meteo, RainViewer, GOES CDN, IEM tiles   (CORS-OK, d
 - GOES `wus` sector is 1000×1000; `psw`/`pnw` are 1200×1200.
 - High-res radar = IEM NEXRAD **N0Q** tile cache (keyless, CORS `*`).
 - NDOT (nvroads.com) blocks framing (X-Frame-Options) → proxied; its live data layer may still be cross-origin-blocked (base map loads, incidents may not). Caltrans QuickMap embeds directly.
+- Zoom Earth (zoom.earth) blocks framing (X-Frame-Options: SAMEORIGIN) → proxied like NDOT (strip XFO, strip CSP `<meta>`, inject `<base>`). Heavy SPA: tiles/imagery should paint, but its cross-origin live storm data may be partially blocked → panel keeps an "Open full site ↗" fallback.
+- Windy (embed.windy.com/embed2.html) **allows framing** → embedded directly, no proxy. Three independent panels (`src/components/WindyMaps.jsx`: radar+lightning, wind, waves) sharing a `WindyEmbed` helper. Centered via `lat`/`lon`/`detailLat`/`detailLon`/`zoom`/`overlay` URL params built from the selected-city `location` state; `key={src}` remounts (re-centers) the iframe on city change. Keyless basic embed. Waves overlay only has data over oceans (blank for inland defaults like Tahoe).
 - **NOAA MAG is access-blocked (403)** to non-browser clients → model maps come from Tropical Tidbits (`mslp_pcpn`, `ref_frzn`, `mslp_wind`, `apcpn`; regions `us`/`wus`; NAM has no `wus`).
 
 ## Conventions / constraints
 - Keyless sources only. NWS needs a descriptive User-Agent (browser supplies one; proxy sets its own).
 - Every panel wraps fetches in try/catch with visible loading/error states.
+- **Units:** compute physics in SI; format via the per-quantity registry in `src/lib/units.js` (`display`/`displayParts`). Imperial is the default; the header `UnitToggle` (state in `src/lib/unitsContext.jsx`, persisted to `localStorage`) only re-formats. CAPE/CIN/pressure are J/kg & hPa in both systems. Full policy + table: `docs/build-spec.md` → "Units policy". Converters/invariance tested in `src/lib/units.test.js` (`npm test`).
 - Probabilities are labeled **official vs. derived**; the 18-h hazard assessment is explicitly "derived, not an official probability."
 - Dark theme; auto-refresh every 5 min.
 - Not for operational/life-safety use (see footer disclaimer).

@@ -6,6 +6,7 @@ export const deltaCToF = (c) => (c == null ? null : c * 1.8); // temperature DIF
 export const kmhToMph = (k) => (k == null ? null : k * 0.621371);
 export const kmhToMs = (k) => (k == null ? null : k / 3.6);
 export const msToKt = (ms) => (ms == null ? null : ms * 1.94384);
+export const msToMph = (ms) => (ms == null ? null : ms * 2.236936);
 export const mToFt = (m) => (m == null ? null : m * 3.28084);
 export const mmToIn = (mm) => (mm == null ? null : mm / 25.4);
 export const cmToIn = (cm) => (cm == null ? null : cm / 2.54);
@@ -99,9 +100,16 @@ const REGISTRY = {
     imperial: { to: mmToIn, digits: 2, suffix: 'in' },
     metric: { to: id, digits: 1, suffix: 'mm' },
   },
-  // Wind speed / shear: internal m/s. Imperial → kt (whole); metric → m/s (1 dp).
+  // Sounding shear (and other upper-air winds quoted in knots by convention):
+  // internal m/s. Imperial → kt (whole); metric → m/s (1 dp).
   wind: {
     imperial: { to: msToKt, digits: 0, suffix: 'kt' },
+    metric: { to: id, digits: 1, suffix: 'm/s' },
+  },
+  // Surface / transport wind: internal m/s. Imperial → mph (whole) to match the
+  // rest of the surface UI; metric → m/s (1 dp). Knots stay reserved for shear.
+  windSurface: {
+    imperial: { to: msToMph, digits: 0, suffix: 'mph' },
     metric: { to: id, digits: 1, suffix: 'm/s' },
   },
   // ── Identical in both systems (meteorological convention) ──
@@ -140,14 +148,4 @@ export function displayParts(quantityKey, siValue, system = DEFAULT_SYSTEM) {
   const rule = quantity[system] || quantity[DEFAULT_SYSTEM];
   if (siValue == null || Number.isNaN(siValue)) return { num: '—', unit: '', text: '—' };
   const num = formatNumber(rule.to(siValue), rule);
-  const unit = rule.suffix || '';
-  return { num, unit, text: unit ? `${num} ${unit}` : num };
-}
-
-// Format an SI value to a single display string, e.g.
-//   display('height', 1524, 'imperial') → "5,000 ft"
-//   display('cape', 2400, 'imperial')   → "2,400 J/kg"
-//   display('temperature', 0, 'metric') → "0°C"
-export function display(quantityKey, siValue, system = DEFAULT_SYSTEM) {
-  return displayParts(quantityKey, siValue, system).text;
-}
+  const unit = rule.suffix || 

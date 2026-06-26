@@ -28,6 +28,8 @@ import Snow from './components/Snow.jsx';
 import Radar from './components/Radar.jsx';
 import RadarHiRes from './components/RadarHiRes.jsx';
 import Satellite from './components/Satellite.jsx';
+import ZoomEarth from './components/ZoomEarth.jsx';
+import { WindyRadar, WindyWind, WindyWaves } from './components/WindyMaps.jsx';
 import ModelMaps from './components/ModelMaps.jsx';
 import AirQuality from './components/AirQuality.jsx';
 import Confidence from './components/Confidence.jsx';
@@ -203,6 +205,20 @@ export default function App() {
           <ModelMaps location={location} refreshKey={tick} />
         </div>
 
+        <div className="col-4">
+          <WindyRadar location={location} />
+        </div>
+        <div className="col-4">
+          <WindyWind location={location} />
+        </div>
+        <div className="col-4">
+          <WindyWaves location={location} />
+        </div>
+
+        <div className="col-12">
+          <ZoomEarth location={location} />
+        </div>
+
         <div className="col-12">
           <Confidence ensemble={ensemble} />
         </div>
@@ -230,7 +246,7 @@ export default function App() {
       <footer className="footer">
         <div>
           <strong>Sources:</strong> NWS / api.weather.gov · Open-Meteo (GFS, Air Quality, Ensemble, Geocoding) ·
-          RainViewer · Iowa State Mesonet (NEXRAD N0Q) · NOAA/NESDIS/STAR GOES-18 · Tropical Tidbits (model maps) · NOAA SPC (mesoanalysis &amp;
+          RainViewer · Iowa State Mesonet (NEXRAD N0Q) · NOAA/NESDIS/STAR GOES-18 · Zoom Earth (satellite &amp; storms) · Windy.com (radar/wind/waves embeds) · Tropical Tidbits (model maps) · NOAA SPC (mesoanalysis &amp;
           outlooks) · University of Wyoming Upper-Air · Caltrans QuickMap · Nevada DOT 511.
         </div>
         <div>

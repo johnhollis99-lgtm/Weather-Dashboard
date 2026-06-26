@@ -112,7 +112,7 @@ function Body({ diag }) {
   const transportWind =
     transportWindMs == null
       ? null
-      : `${windDir(nws.transportWindDirection?.value)} ${displayParts('wind', transportWindMs, system).text}`;
+      : `${windDir(nws.transportWindDirection?.value)} ${displayParts('windSurface', transportWindMs, system).text}`;
 
   return (
     <>
@@ -162,5 +162,3 @@ function Body({ diag }) {
         <div className="obs-note">GFS valid {gfs.validTime.replace('T', ' ')} (local)</div>
       )}
     </>
-  );
-}

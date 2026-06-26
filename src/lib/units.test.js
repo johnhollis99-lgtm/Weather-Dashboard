@@ -73,6 +73,11 @@ describe('display() formatting & precision', () => {
     expect(display('wind', 10, 'metric')).toBe('10.0 m/s');
   });
 
+  it('surface wind → whole mph (imperial) / 1 dp m/s (metric)', () => {
+    expect(display('windSurface', 10, 'imperial')).toBe('22 mph'); // 10 m/s → 22.37 → 22
+    expect(display('windSurface', 10, 'metric')).toBe('10.0 m/s');
+  });
+
   it('null/NaN → em dash', () => {
     expect(display('temperature', null, 'imperial')).toBe('—');
     expect(display('height', NaN, 'metric')).toBe('—');
@@ -108,11 +113,4 @@ describe('unit-invariant quantities', () => {
   });
 
   it('every quantity renders in every system without throwing', () => {
-    const keys = ['temperature', 'tempDelta', 'height', 'heightKft', 'lapseRate', 'pwat', 'wind', 'pressure', 'cape', 'cin', 'index'];
-    for (const key of keys) {
-      for (const sys of SYSTEMS) {
-        expect(typeof display(key, 1, sys)).toBe('string');
-      }
-    }
-  });
-});
+    const keys = ['temperature', 'tempDelt

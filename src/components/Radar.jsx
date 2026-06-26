@@ -22,7 +22,7 @@ export default function Radar({ location, refreshKey }) {
   useEffect(() => {
     const map = L.map(mapEl.current, { zoomControl: true, attributionControl: true }).setView(
       [location.lat, location.lon],
-      8,
+      6,
     );
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '© OpenStreetMap, © CARTO',
@@ -46,7 +46,7 @@ export default function Radar({ location, refreshKey }) {
   // Recenter on location change.
   useEffect(() => {
     if (mapRef.current) {
-      mapRef.current.setView([location.lat, location.lon], 8);
+      mapRef.current.setView([location.lat, location.lon], 6);
       markerRef.current?.setLatLng([location.lat, location.lon]);
     }
   }, [location.lat, location.lon]);

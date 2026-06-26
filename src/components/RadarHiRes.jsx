@@ -18,7 +18,7 @@ export default function RadarHiRes({ location, refreshKey }) {
   const site = nearestRadar(location.lat, location.lon);
 
   useEffect(() => {
-    const map = L.map(mapEl.current, { zoomControl: true }).setView([location.lat, location.lon], 8);
+    const map = L.map(mapEl.current, { zoomControl: true }).setView([location.lat, location.lon], 7);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '© OpenStreetMap, © CARTO',
       maxZoom: 19,

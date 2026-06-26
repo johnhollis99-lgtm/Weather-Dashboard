@@ -51,5 +51,39 @@ CORS/hotlinking are routed through the bundled Express proxy and rendered as
   loading/error states; footer crediting sources + not-for-life-safety
   disclaimer; probabilities labeled official vs. derived.
 
+## Units policy
+Compute **all** physics internally in SI (°C, m, hPa, J/kg, m/s, mm); never do
+physics in imperial. Formatting is delegated to a per-quantity display registry
+(`src/lib/units.js`) so the unit toggle only re-formats — it never recomputes.
+
+- Default display is **imperial** (US audience); a header toggle (`UnitToggle`)
+  switches to metric and the choice persists (`localStorage` `wx.unitSystem`,
+  provided via `UnitsProvider` / `useUnits`).
+- `display(quantityKey, siValue, system)` → a formatted string;
+  `displayParts(...)` → `{ num, unit, text }` for panels that style the unit
+  separately. Examples: `display('height', 1524, 'imperial')` → `"5,000 ft"`;
+  `display('cape', 2400, 'imperial')` → `"2,400 J/kg"`.
+
+| Quantity            | Internal (SI) | Imperial        | Metric  | Precision                  |
+|---------------------|---------------|-----------------|---------|----------------------------|
+| temperature/dewpt   | °C            | °F              | °C      | whole degrees              |
+| tempDelta (depress.)| °C            | °F (×1.8)       | °C      | 1 dp                       |
+| height (LCL/EL/mix) | m             | ft              | m       | nearest 100 ft / 10 m      |
+| heightKft (axis)    | m             | kft             | km      | 1 dp                       |
+| lapseRate           | °C/km         | °F/1000 ft      | °C/km   | 1 dp                       |
+| pwat                | mm            | in              | mm      | 2 dp in / 1 dp mm          |
+| wind/shear          | m/s           | kt              | m/s     | whole kt / 1 dp m/s        |
+| pressure            | hPa           | hPa (no conv.)  | hPa     | whole                      |
+| cape / cin          | J/kg          | J/kg (no conv.) | J/kg    | nearest 10                 |
+| index (LI/Showalter)| °C/unitless   | as-is           | as-is   | 1 dp                       |
+
+- **CAPE, CIN, and pressure render identically in both systems** by meteorological
+  convention; the Diagnostics panel shows a one-time dismissable note + an ⓘ
+  tooltip so the toggle doesn't read as broken.
+- The UWyo skew-T is a proxied **raster GIF** (°C axis baked in) — its axis can't
+  be relabeled; only the numeric readouts respond to the toggle.
+- Converters + invariance (CAPE/CIN/pressure byte-identical across systems) are
+  covered by `src/lib/units.test.js` (`npm test`, vitest).
+
 ## API cheat sheet
 See `CLAUDE.md` → "Upstream gotchas" for the exact, verified endpoint quirks.

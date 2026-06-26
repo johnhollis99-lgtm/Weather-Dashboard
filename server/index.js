@@ -208,6 +208,42 @@ app.get('/api/ndot', async (_req, res) => {
   }
 });
 
+// Zoom Earth (zoom.earth) — live satellite + storm/hurricane tracking. It sends
+// X-Frame-Options: SAMEORIGIN, so (like NDOT) it can't be iframed directly. We
+// fetch the top document, strip the framing header + any CSP <meta>, and inject
+// <base href> so its root-relative assets keep loading from zoom.earth. The map
+// view is steered client-side via the iframe URL hash (#view=lat,lon,zoomz).
+app.get('/api/zoomearth', async (_req, res) => {
+  try {
+    const upstreamUrl = 'https://zoom.earth/';
+    const r = await fetch(upstreamUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      redirect: 'follow',
+    });
+    if (!r.ok) {
+      return res.status(502).send(`<p>Zoom Earth upstream returned ${r.status}.</p>`);
+    }
+    let html = await r.text();
+    // Drop any in-document CSP that could re-impose frame-ancestors.
+    html = html.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
+    // Make root-relative URLs resolve back to zoom.earth.
+    if (!/<base\s/i.test(html)) {
+      html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${upstreamUrl}">`);
+    }
+    // Never echo a framing-blocker; allow same-origin (prod) + localhost (dev).
+    res.removeHeader('X-Frame-Options');
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Content-Security-Policy', "frame-ancestors 'self' http://localhost:*");
+    res.send(html);
+  } catch (err) {
+    res.status(502).send(`<p>Zoom Earth proxy failed: ${String(err)}</p>`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Model forecast maps — Tropical Tidbits graphics (latest full model runs).
 // TT hotlink-protects its images, so we fetch server-side with a Referer and
@@ -308,5 +344,5 @@ if (existsSync(distDir)) {
 
 app.listen(PORT, () => {
   console.log(`[proxy] wx-dashboard listening on http://localhost:${PORT}`);
-  console.log(`[proxy] inline image routes: /api/sounding, /api/spc, /api/spc-outlook, /api/ndot, /api/model`);
+  console.log(`[proxy] inline image routes: /api/sounding, /api/spc, /api/spc-outlook, /api/ndot, /api/zoomearth, /api/model`);
 });
