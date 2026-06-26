@@ -30,3 +30,16 @@ export default function ZoomEarth({ location }) {
       <iframe
         key={iframeSrc}
         title="Zoom Earth"
+        src={iframeSrc}
+        className="road-frame"
+        loading="lazy"
+        allow="fullscreen"
+        sandbox="allow-scripts allow-same-origin allow-popups"
+      />
+      <div className="obs-note">
+        Zoom Earth blocks direct embedding; shown via the local proxy and centered on{' '}
+        <strong>{location.name}</strong>. If the live storm layer doesn't fully paint here, use “Open full site ↗”.
+      </div>
+    </Panel>
+  );
+}

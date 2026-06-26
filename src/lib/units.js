@@ -148,4 +148,14 @@ export function displayParts(quantityKey, siValue, system = DEFAULT_SYSTEM) {
   const rule = quantity[system] || quantity[DEFAULT_SYSTEM];
   if (siValue == null || Number.isNaN(siValue)) return { num: '—', unit: '', text: '—' };
   const num = formatNumber(rule.to(siValue), rule);
-  const unit = rule.suffix || 
+  const unit = rule.suffix || '';
+  return { num, unit, text: unit ? `${num} ${unit}` : num };
+}
+
+// Format an SI value to a single display string, e.g.
+//   display('height', 1524, 'imperial') → "5,000 ft"
+//   display('cape', 2400, 'imperial')   → "2,400 J/kg"
+//   display('temperature', 0, 'metric') → "0°C"
+export function display(quantityKey, siValue, system = DEFAULT_SYSTEM) {
+  return displayParts(quantityKey, siValue, system).text;
+}

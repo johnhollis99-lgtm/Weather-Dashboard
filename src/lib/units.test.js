@@ -113,4 +113,11 @@ describe('unit-invariant quantities', () => {
   });
 
   it('every quantity renders in every system without throwing', () => {
-    const keys = ['temperature', 'tempDelt
+    const keys = ['temperature', 'tempDelta', 'height', 'heightKft', 'lapseRate', 'pwat', 'wind', 'windSurface', 'pressure', 'cape', 'cin', 'index'];
+    for (const key of keys) {
+      for (const sys of SYSTEMS) {
+        expect(typeof display(key, 1, sys)).toBe('string');
+      }
+    }
+  });
+});

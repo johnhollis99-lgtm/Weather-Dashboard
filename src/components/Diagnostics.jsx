@@ -162,3 +162,5 @@ function Body({ diag }) {
         <div className="obs-note">GFS valid {gfs.validTime.replace('T', ' ')} (local)</div>
       )}
     </>
+  );
+}
