@@ -197,7 +197,24 @@ button.active { background: var(--accent); color: #05121b; border-color: var(--a
 .metric .m-value { font-size: 18px; font-weight: 600; margin-top: 2px; }
 .metric .m-unit { font-size: 12px; color: var(--text-faint); font-weight: 400; }
 .metric.na .m-value { color: var(--text-faint); font-size: 13px; font-weight: 400; }
-.metric .m-info { color: var(--text-faint); cursor: help; font-size: 10px; vertical-align: super; }
+/* Info badge: a CSS-drawn circled "i" (no special glyph, so it can't render as "?"). */
+.metric .m-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  margin-left: 5px;
+  border: 1px solid var(--text-faint);
+  border-radius: 50%;
+  font-size: 9px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: help;
+  vertical-align: middle;
+}
 
 /* One-time note: CAPE/CIN/pressure are J/kg & hPa in both unit systems. */
 .cape-tip {

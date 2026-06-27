@@ -524,7 +524,7 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
           <div key={c.label} className="metric" title={CARD_TIP[c.label]}>
             <div className="m-label">
               {c.label}
-              {CARD_TIP[c.label] ? <span className="m-info"> ⓘ</span> : null}
+              {CARD_TIP[c.label] ? <span className="m-info" aria-hidden="true">i</span> : null}
             </div>
             <div className="m-value">
               {c.value}

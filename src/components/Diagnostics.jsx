@@ -44,7 +44,7 @@ function Q({ label, q, si, system, info }) {
         {label}
         {info ? (
           <span className="m-info" title={info} aria-label={info}>
-            {' '}ⓘ
+            i
           </span>
         ) : null}
       </div>
