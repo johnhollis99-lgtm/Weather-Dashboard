@@ -1,44 +1,30 @@
 import Panel from './Panel.jsx';
 
-// Zoom Earth — live satellite imagery with active tropical storm / hurricane
-// tracks. Great for basin-scale storm tracking, which the GOES-West sector panel
-// doesn't cover. zoom.earth sends X-Frame-Options, so it's routed through the
-// local proxy (/api/zoomearth, mirrors the NDOT approach); the map view is
-// steered client-side via the URL hash. A basin-scale zoom (~5z) is a good
-// default for watching a storm relative to the coastline.
+// Zoom Earth — live satellite + active tropical storm / hurricane tracks.
+//
+// It used to be embedded via the /api/zoomearth proxy, but zoom.earth is a heavy
+// SPA whose live imagery layer never reliably paints inside a cross-origin
+// iframe (and its frame-busting JS fought the proxy). Rather than show an empty
+// gray panel, it's now a compact set of links that open the real site in a new
+// tab, pre-centered on the selected location. Sits next to the other maps.
 export default function ZoomEarth({ location }) {
-  const view = `view=${location.lat.toFixed(2)},${location.lon.toFixed(2)},5z`;
-  const iframeSrc = `/api/zoomearth#${view}`;
-  const ext = `https://zoom.earth/#${view}`;
+  const view = `view=${location.lat.toFixed(2)},${location.lon.toFixed(2)},6z`;
+  const here = `https://zoom.earth/#${view}`;
 
   return (
-    <Panel title="Zoom Earth — Satellite & Storms" sub="Live satellite · tropical storm/hurricane tracking">
-      <div className="btn-row" style={{ marginBottom: 8 }}>
-        <a href="https://zoom.earth/storms/" target="_blank" rel="noreferrer" style={{ alignSelf: 'center', fontSize: 13 }}>
-          Active storms list ↗
+    <Panel title="Zoom Earth — Satellite &amp; Storms" sub="opens in a new tab (doesn't embed)">
+      <p className="link-note">
+        Live global satellite with active tropical-storm and hurricane tracks — basin-scale coverage the GOES sector
+        panel doesn't show. Zoom Earth blocks embedding, so these open the real site, centered on{' '}
+        <strong>{location.name}</strong>.
+      </p>
+      <div className="link-row">
+        <a className="link-cta" href={here} target="_blank" rel="noreferrer">
+          🛰 Satellite over {location.name} ↗
         </a>
-        <a href={ext} target="_blank" rel="noreferrer" style={{ marginLeft: 'auto', alignSelf: 'center', fontSize: 13 }}>
-          Open full site ↗
+        <a className="link-cta" href="https://zoom.earth/storms/" target="_blank" rel="noreferrer">
+          🌀 Active storms list ↗
         </a>
-      </div>
-
-      {/* Proxying strips X-Frame-Options/CSP, which also removes the guard that
-          would stop zoom.earth's frame-busting JS from navigating the TOP window
-          to https://zoom.earth/ (it was hijacking the whole dashboard). Sandbox
-          the frame and deliberately OMIT allow-top-navigation so the embedded
-          SPA can still run/render but can't redirect the parent. */}
-      <iframe
-        key={iframeSrc}
-        title="Zoom Earth"
-        src={iframeSrc}
-        className="road-frame"
-        loading="lazy"
-        allow="fullscreen"
-        sandbox="allow-scripts allow-same-origin allow-popups"
-      />
-      <div className="obs-note">
-        Zoom Earth blocks direct embedding; shown via the local proxy and centered on{' '}
-        <strong>{location.name}</strong>. If the live storm layer doesn't fully paint here, use “Open full site ↗”.
       </div>
     </Panel>
   );

@@ -162,10 +162,12 @@ export default function App() {
       <AlertsBanner alerts={alerts} />
 
       <div className="grid">
+        {/* ── Overview ─────────────────────────────────────────────── */}
         <div className="col-12">
           <Summary briefing={brief} loading={diagLoading} error={diagError} />
         </div>
 
+        {/* ── Now + the diagnostic data ────────────────────────────── */}
         <div className="col-4">
           <CurrentConditions obs={obs} forecast={forecast} points={points} />
         </div>
@@ -173,6 +175,15 @@ export default function App() {
           <Diagnostics diag={diag} loading={diagLoading} error={diagError} />
         </div>
 
+        {/* ── The sounding, kept right next to the data it visualizes ─ */}
+        <div className="col-12">
+          <DiagnosticSoundingPanel location={location} refreshKey={tick} />
+        </div>
+        <div className="col-12">
+          <UpperAir location={location} refreshKey={tick} />
+        </div>
+
+        {/* ── Interpretation ───────────────────────────────────────── */}
         <div className="col-6">
           <Hazards alerts={alerts} sum={sum18} hazards={hazards} />
         </div>
@@ -191,6 +202,18 @@ export default function App() {
           <Snow gfs={gfs} grid={grid} location={location} />
         </div>
 
+        <div className="col-12">
+          <Confidence ensemble={ensemble} />
+        </div>
+
+        <div className="col-4">
+          <AirQuality airQuality={airQuality} />
+        </div>
+        <div className="col-8">
+          <ExtendedForecast forecast={forecast} />
+        </div>
+
+        {/* ── Maps ─────────────────────────────────────────────────── */}
         <div className="col-6">
           <Radar location={location} refreshKey={tick} />
         </div>
@@ -215,31 +238,14 @@ export default function App() {
           <WindyWaves location={location} />
         </div>
 
+        {/* Zoom Earth never paints inside an iframe → demoted to a link by the maps */}
         <div className="col-12">
           <ZoomEarth location={location} />
         </div>
 
-        <div className="col-12">
-          <Confidence ensemble={ensemble} />
-        </div>
-
-        <div className="col-4">
-          <AirQuality airQuality={airQuality} />
-        </div>
-        <div className="col-8">
-          <ExtendedForecast forecast={forecast} />
-        </div>
-
+        {/* ── Traffic, at the very bottom ──────────────────────────── */}
         <div className="col-12">
           <Roads location={location} />
-        </div>
-
-        <div className="col-12">
-          <DiagnosticSoundingPanel location={location} refreshKey={tick} />
-        </div>
-
-        <div className="col-12">
-          <UpperAir location={location} refreshKey={tick} />
         </div>
       </div>
 

@@ -7,7 +7,33 @@ import {
   interpByPressure,
   EPS,
 } from '../lib/soundingMath.js';
-import { displayParts } from '../lib/units.js';
+import { displayParts, cToF } from '../lib/units.js';
+
+// Plain-language hover explanations for each part of the chart (native SVG/HTML
+// <title>/title= tooltips — no JS, no overlap, work everywhere). Hover any
+// curve, shaded region, marker, or readout card for a one-line explanation.
+const TIP = {
+  temp: 'Environmental temperature — the actual air temperature measured at each height. It leans up-and-right because the chart is "skewed".',
+  dew: 'Environmental dewpoint (moisture). The closer this line sits to the temperature line, the more humid/saturated that layer is — touching = cloud.',
+  parcel: 'Lifted-parcel path — the temperature a surface air bubble would have if forced to rise. Where it sits to the RIGHT of (warmer than) the temperature line, the air rises on its own.',
+  cape: 'CAPE — the area where the lifted parcel is warmer than its surroundings, so it accelerates upward. This is the storm’s fuel; bigger area = stronger updrafts.',
+  cin: 'CIN — the area where the parcel is cooler than its surroundings and resists rising. The "cap" that must be broken before storms can fire.',
+  capband: 'Capping inversion — a warm lid aloft that traps rising air until daytime heating or lift breaks it.',
+  lcl: 'LCL (cloud base) — the height where rising surface air cools to saturation and the cloud base forms.',
+  lfc: 'LFC (level of free convection) — above this height a lifted parcel is buoyant and rises freely.',
+  el: 'EL (equilibrium level) — the parcel’s storm-top / anvil height, where it finally stops rising.',
+  shear: '0–6 km bulk wind shear — how much the wind changes from the surface to ~20,000 ft. Stronger shear organizes storms (supercells).',
+};
+
+// Tooltips for the derived-parameter readout cards.
+const CARD_TIP = {
+  'CAPE (SB)': 'Convective Available Potential Energy (surface-based), in J/kg. The fuel for thunderstorms; ~1000+ supports strong storms. Kept in J/kg by meteorological convention.',
+  'CIN (SB)': 'Convective Inhibition (J/kg). Energy a parcel must overcome before rising freely — the "cap". More negative = harder for storms to start.',
+  '0–6 km shear': 'Bulk wind shear, surface to ~6 km (20,000 ft). Stronger = better-organized storms.',
+  '700–500 lapse': 'Mid-level temperature lapse rate (700→500 hPa) — how fast it cools with height aloft. ≥7 °C/km is steep/unstable.',
+  PWAT: 'Precipitable water — all the moisture in the column condensed to liquid depth. Higher = heavier rain potential.',
+  'LCL (cloud base)': 'Lifted Condensation Level — the height of cloud base for a rising surface parcel.',
+};
 
 // ── Annotated diagnostic Skew-T log-P ──────────────────────────────────────
 // Renders the profile AND draws each derived convective feature as a labeled,
@@ -366,20 +392,27 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
             </g>
           );
         })}
-        {/* isotherm labels along the bottom */}
+        {/* isotherm labels along the bottom — °C (standard) with °F underneath */}
         {ISOTHERMS.map((t) => (
-          <text key={`itl${t}`} x={xBase(t)} y={yB + 15} className="skt-axis" textAnchor="middle">
-            {t}
-          </text>
+          <g key={`itl${t}`}>
+            <text x={xBase(t)} y={yB + 15} className="skt-axis" textAnchor="middle">
+              {t}°
+            </text>
+            <text x={xBase(t)} y={yB + 26} className="skt-axis-f" textAnchor="middle">
+              {Math.round(cToF(t))}°F
+            </text>
+          </g>
         ))}
-        <text x={(xL + xR) / 2} y={yB + 30} className="skt-axis-title" textAnchor="middle">
-          Temperature (°C, skewed) · pressure (hPa) + approx. height (MSL) at left
+        <text x={(xL + xR) / 2} y={yB + 42} className="skt-axis-title" textAnchor="middle">
+          Temperature — °C (skewed) with °F · pressure (hPa) + approx. height (MSL) at left
         </text>
 
         {/* cap inversion band */}
         {capBand && (
           <g style={{ opacity: dim('cap') }}>
-            <rect x={xL} y={capBand.yTop} width={PW} height={capBand.yBot - capBand.yTop} className="skt-cap-band" />
+            <rect x={xL} y={capBand.yTop} width={PW} height={capBand.yBot - capBand.yTop} className="skt-cap-band">
+              <title>{TIP.capband}</title>
+            </rect>
             <text x={xL + 8} y={capBand.yTop - 5} className="skt-callout cap" textAnchor="start">
               Capping inversion — warm lid (+{dp('tempDelta', a.cap.strength)})
             </text>
@@ -388,20 +421,28 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
 
         {/* CIN (cool) + CAPE (warm) shaded areas */}
         <g clipPath={`url(#${clipId})`}>
-          {cinPoly && <polygon points={cinPoly} className="skt-cin" style={{ opacity: dim('cape') }} />}
-          {capePoly && <polygon points={capePoly} className="skt-cape" style={{ opacity: dim('cape') }} />}
+          {cinPoly && (
+            <polygon points={cinPoly} className="skt-cin" style={{ opacity: dim('cape') }}>
+              <title>{TIP.cin}</title>
+            </polygon>
+          )}
+          {capePoly && (
+            <polygon points={capePoly} className="skt-cape" style={{ opacity: dim('cape') }}>
+              <title>{TIP.cape}</title>
+            </polygon>
+          )}
         </g>
 
         {/* data curves (always visible — the base sounding) */}
         <g clipPath={`url(#${clipId})`}>
-          <path d={parcelCurve} className="skt-parcel" />
-          <path d={dewCurve} className="skt-dew" />
-          <path d={tempCurve} className="skt-temp" />
+          <path d={parcelCurve} className="skt-parcel"><title>{TIP.parcel}</title></path>
+          <path d={dewCurve} className="skt-dew"><title>{TIP.dew}</title></path>
+          <path d={tempCurve} className="skt-temp"><title>{TIP.temp}</title></path>
         </g>
 
         {/* LCL / LFC / EL plain-language callouts */}
         <g style={{ opacity: dim('lcl') }}>
-          <circle cx={lclM.x} cy={lclM.y} r="4.5" className="skt-dot lcl" />
+          <circle cx={lclM.x} cy={lclM.y} r="4.5" className="skt-dot lcl"><title>{TIP.lcl}</title></circle>
           <text x={labelSide(lclM.x).x} y={lclM.y + 3} textAnchor={labelSide(lclM.x).anchor} className="skt-callout lcl">
             <tspan x={labelSide(lclM.x).x} dy="-3">Cloud base</tspan>
             <tspan x={labelSide(lclM.x).x} dy="11" className="sub">~{dp('height', a.lcl.heightAGL)} AGL</tspan>
@@ -409,7 +450,7 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
         </g>
         {lfcM && (
           <g style={{ opacity: dim('cape') }}>
-            <circle cx={lfcM.x} cy={lfcM.y} r="4.5" className="skt-dot lfc" />
+            <circle cx={lfcM.x} cy={lfcM.y} r="4.5" className="skt-dot lfc"><title>{TIP.lfc}</title></circle>
             <text x={labelSide(lfcM.x).x} y={lfcM.y + 3} textAnchor={labelSide(lfcM.x).anchor} className="skt-callout lfc">
               <tspan x={labelSide(lfcM.x).x} dy="-3">Storms take off</tspan>
               <tspan x={labelSide(lfcM.x).x} dy="11" className="sub">here (LFC)</tspan>
@@ -418,7 +459,7 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
         )}
         {elM && (
           <g style={{ opacity: dim('cape') }}>
-            <circle cx={elM.x} cy={elM.y} r="4.5" className="skt-dot el" />
+            <circle cx={elM.x} cy={elM.y} r="4.5" className="skt-dot el"><title>{TIP.el}</title></circle>
             <text x={labelSide(elM.x).x} y={elM.y + 3} textAnchor={labelSide(elM.x).anchor} className="skt-callout el">
               <tspan x={labelSide(elM.x).x} dy="-3">Storm top</tspan>
               <tspan x={labelSide(elM.x).x} dy="11" className="sub">~{dp('height', a.el.height)}</tspan>
@@ -453,7 +494,9 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
             height={shearHi.yBot - shearHi.yTop}
             rx={4}
             className="skt-shear-hi"
-          />
+          >
+            <title>{TIP.shear}</title>
+          </rect>
           <text x={WINDX} y={shearHi.yTop - 5} className="skt-anno shear" textAnchor="middle">
             0–6 km
           </text>
@@ -475,11 +518,14 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
         <strong>Storm-mode call:</strong> {a.narrative}
       </p>
 
-      {/* derived-parameter readout */}
+      {/* derived-parameter readout — hover any card for what it means */}
       <div className="diag-grid skt-readout">
         {cards.map((c) => (
-          <div key={c.label} className="metric">
-            <div className="m-label">{c.label}</div>
+          <div key={c.label} className="metric" title={CARD_TIP[c.label]}>
+            <div className="m-label">
+              {c.label}
+              {CARD_TIP[c.label] ? <span className="m-info"> ⓘ</span> : null}
+            </div>
             <div className="m-value">
               {c.value}
               {c.unit ? <span className="m-unit"> {c.unit}</span> : null}
@@ -488,14 +534,14 @@ export default function DiagnosticSounding({ profile, surface, units = 'imperial
         ))}
       </div>
 
-      {/* legend */}
+      {/* legend — hover any swatch for an explanation */}
       <div className="skt-legend">
-        <span><i className="sw temp" /> Temperature</span>
-        <span><i className="sw dew" /> Dewpoint</span>
-        <span><i className="sw parcel" /> Lifted parcel</span>
-        <span><i className="sw cape" /> CAPE</span>
-        <span><i className="sw cin" /> CIN (cap)</span>
-        <span><i className="sw capband" /> Inversion</span>
+        <span title={TIP.temp}><i className="sw temp" /> Temperature</span>
+        <span title={TIP.dew}><i className="sw dew" /> Dewpoint</span>
+        <span title={TIP.parcel}><i className="sw parcel" /> Lifted parcel</span>
+        <span title={TIP.cape}><i className="sw cape" /> CAPE</span>
+        <span title={TIP.cin}><i className="sw cin" /> CIN (cap)</span>
+        <span title={TIP.capband}><i className="sw capband" /> Inversion</span>
       </div>
     </div>
   );
