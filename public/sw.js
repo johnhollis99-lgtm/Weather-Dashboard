@@ -28,7 +28,19 @@ self.addEventListener('fetch', (e) => {
           caches.open(CACHE).then((c) => c.put('/', copy));
           return res;
         })
-        .catch(() => caches.match('/')),
+        .catch(() =>
+          caches
+            .match('/')
+            .then(
+              (hit) =>
+                hit ||
+                new Response('Offline', {
+                  status: 503,
+                  statusText: 'Offline',
+                  headers: { 'Content-Type': 'text/plain' },
+                }),
+            ),
+        ),
     );
     return;
   }
@@ -36,15 +48,25 @@ self.addEventListener('fetch', (e) => {
   // Static build assets: cache-first for instant launch.
   if (url.origin === location.origin && /\.(js|css|png|svg|webmanifest|woff2?)$/.test(url.pathname)) {
     e.respondWith(
-      caches.match(req).then(
-        (hit) =>
-          hit ||
-          fetch(req).then((res) => {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
-            return res;
-          }),
-      ),
+      caches
+        .match(req)
+        .then(
+          (hit) =>
+            hit ||
+            fetch(req).then((res) => {
+              const copy = res.clone();
+              caches.open(CACHE).then((c) => c.put(req, copy));
+              return res;
+            }),
+        )
+        .catch(
+          () =>
+            new Response('Offline', {
+              status: 503,
+              statusText: 'Offline',
+              headers: { 'Content-Type': 'text/plain' },
+            }),
+        ),
     );
     return;
   }

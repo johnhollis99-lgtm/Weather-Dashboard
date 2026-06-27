@@ -201,7 +201,7 @@ app.get('/api/ndot', async (_req, res) => {
     // Never echo a framing-blocker; set permissive framing for localhost.
     res.removeHeader('X-Frame-Options');
     res.set('Content-Type', 'text/html; charset=utf-8');
-    res.set('Content-Security-Policy', "frame-ancestors 'self' http://localhost:*");
+    res.set('Content-Security-Policy', "frame-ancestors 'self' http://localhost:* https://conductor-assistant.onrender.com");
     res.send(html);
   } catch (err) {
     res.status(502).send(`<p>NDOT 511 proxy failed: ${String(err)}</p>`);
@@ -237,7 +237,7 @@ app.get('/api/zoomearth', async (_req, res) => {
     // Never echo a framing-blocker; allow same-origin (prod) + localhost (dev).
     res.removeHeader('X-Frame-Options');
     res.set('Content-Type', 'text/html; charset=utf-8');
-    res.set('Content-Security-Policy', "frame-ancestors 'self' http://localhost:*");
+    res.set('Content-Security-Policy', "frame-ancestors 'self' http://localhost:* https://conductor-assistant.onrender.com");
     res.send(html);
   } catch (err) {
     res.status(502).send(`<p>Zoom Earth proxy failed: ${String(err)}</p>`);

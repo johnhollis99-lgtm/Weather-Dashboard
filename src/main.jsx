@@ -16,11 +16,19 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>,
 );
 
-// Register the service worker only in production builds (keeps dev HMR clean and
-// avoids caching live data while developing). Enables PWA install on the
-// deployed HTTPS URL.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
+// Service worker registration TEMPORARILY DISABLED. The SW only ran in production
+// (this is the main environmental difference vs. localhost dev), so it's commented
+// out to make the deployed build behave like dev while we rule it out as the cause
+// of embeds degrading to fallback links. Original block preserved below:
+//
+// if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+//   window.addEventListener('load', () => {
+//     navigator.serviceWorker.register('/sw.js').catch(() => {});
+//   });
+// }
+//
+// Proactively remove any service worker a prior production build already installed,
+// so returning visitors drop the old SW on their next load (runs in dev and prod).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
 }

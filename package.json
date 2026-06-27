@@ -9,6 +9,7 @@
     "dev:server": "node server/index.js",
     "dev:web": "vite",
     "build": "vite build",
+    "build:conductor": "cross-env CONDUCTOR_BUILD=true vite build",
     "start": "node server/index.js",
     "preview": "vite preview",
     "test": "vitest run",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
+    "cross-env": "^10.1.0",
     "vite": "^6.0.7",
     "vitest": "^4.1.9"
   }
