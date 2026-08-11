@@ -36,6 +36,7 @@ import Confidence from './components/Confidence.jsx';
 import Roads from './components/Roads.jsx';
 import DiagnosticSoundingPanel from './components/DiagnosticSoundingPanel.jsx';
 import ExtendedForecast from './components/ExtendedForecast.jsx';
+import Section from './components/Section.jsx';
 
 const REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
 
@@ -135,10 +136,22 @@ export default function App() {
     [diag, hazards, sum18, confidence, obs.data, location, alerts.data],
   );
 
-  const lastUpdated = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // Stamped once per refresh tick (not per render) so the header doesn't churn
+  // and the "as of" time actually corresponds to the data on screen.
+  const lastUpdated = useMemo(
+    () => new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tick, lat, lon],
+  );
+
+  // Freshness of the underlying fetches, for the header indicator.
+  const anyLoading =
+    points.loading || forecast.loading || grid.loading || obs.loading || gfs.loading || alerts.loading;
+  const anyError = points.error || grid.error || gfs.error || alerts.error;
+  const freshness = anyError ? 'error' : anyLoading ? 'updating' : 'live';
 
   return (
-    <>
+    <div className="wx-dash">
       <header className="app-header">
         <div>
           <div className="app-title">
@@ -154,96 +167,140 @@ export default function App() {
         </button>
         <div className="header-spacer" />
         <UnitToggle />
-        <span className="refresh-note">updated {lastUpdated} · auto-refresh 5 min</span>
+        <span className={`freshness freshness-${freshness}`} title={anyError ? String(anyError) : undefined}>
+          <span className="freshness-dot" aria-hidden="true" />
+          {freshness === 'error' ? 'Some sources failed' : freshness === 'updating' ? 'Updating…' : 'Live'}
+        </span>
+        <span className="refresh-note">as of {lastUpdated} · auto-refresh 5 min</span>
         <button onClick={() => setTick((x) => x + 1)}>↻ Refresh</button>
       </header>
 
       <AlertsBanner alerts={alerts} />
 
-      <div className="grid">
-        {/* ── Overview ─────────────────────────────────────────────── */}
-        <div className="col-12">
-          <Summary briefing={brief} loading={diagLoading} error={diagError} />
-        </div>
 
-        {/* ── Now + the diagnostic data ────────────────────────────── */}
-        <div className="col-4">
-          <CurrentConditions obs={obs} forecast={forecast} points={points} />
-        </div>
-        <div className="col-8">
-          <Diagnostics diag={diag} loading={diagLoading} error={diagError} />
-        </div>
+      {/* Ordered the way a person actually reads weather: what's happening now,
+          what it means, what's coming, then the evidence behind it. */}
+      <main className="wx-main">
+        {/* ── 1. NOW ───────────────────────────────────────────────── */}
+        <Section
+          id="now"
+          title="Now"
+          kicker="observed"
+          note="Measured values from official stations and sensors — no interpretation."
+        >
+          <div className="col-8">
+            <CurrentConditions obs={obs} forecast={forecast} points={points} />
+          </div>
+          <div className="col-4">
+            <AirQuality airQuality={airQuality} />
+          </div>
+        </Section>
 
-        {/* ── The sounding, kept right next to the data it visualizes ─ */}
-        <div className="col-12">
-          <DiagnosticSoundingPanel location={location} refreshKey={tick} />
-        </div>
+        {/* ── 2. THE READ — the point of the whole dashboard ────────── */}
+        <Section
+          id="the-read"
+          title="The Read"
+          kicker="interpretation"
+          note="Plain-language analysis derived in-app from the numbers below. This is interpretation, not an official NWS forecast."
+        >
+          <div className="col-12">
+            <Summary briefing={brief} loading={diagLoading} error={diagError} />
+          </div>
+          <div className="col-6">
+            <Analysis diag={diag} loading={diagLoading} error={diagError} />
+          </div>
+          <div className="col-6">
+            <Hazards alerts={alerts} sum={sum18} hazards={hazards} />
+          </div>
+        </Section>
 
-        {/* ── Interpretation ───────────────────────────────────────── */}
-        <div className="col-6">
-          <Hazards alerts={alerts} sum={sum18} hazards={hazards} />
-        </div>
-        <div className="col-6">
-          <Analysis diag={diag} loading={diagLoading} error={diagError} />
-        </div>
+        {/* ── 3. WHAT'S COMING ─────────────────────────────────────── */}
+        <Section
+          id="whats-coming"
+          title="What's Coming"
+          kicker="forecast"
+          note="Official NWS forecast periods, plus model-derived wind, snow and ensemble spread."
+        >
+          <div className="col-12">
+            <HourlyStrip hourly={hourly} />
+          </div>
+          <div className="col-6">
+            <Wind gfs={gfs} grid={grid} diag={diag} />
+          </div>
+          <div className="col-6">
+            <Snow gfs={gfs} grid={grid} location={location} />
+          </div>
+          <div className="col-8">
+            <ExtendedForecast forecast={forecast} />
+          </div>
+          <div className="col-4">
+            <Confidence ensemble={ensemble} />
+          </div>
+        </Section>
 
-        <div className="col-12">
-          <HourlyStrip hourly={hourly} />
-        </div>
+        {/* ── 4. DIAGNOSTICS — the evidence ────────────────────────── */}
+        <Section
+          id="diagnostics"
+          title="Diagnostics"
+          kicker="derived · thermodynamic"
+          note="The raw parameters the analysis above is built from. Values marked “derived” are computed in-app; the rest come straight from NWS gridpoint or Open-Meteo GFS output."
+        >
+          <div className="col-12">
+            <Diagnostics diag={diag} loading={diagLoading} error={diagError} />
+          </div>
+          <div className="col-12">
+            <DiagnosticSoundingPanel location={location} refreshKey={tick} />
+          </div>
+        </Section>
 
-        <div className="col-6">
-          <Wind gfs={gfs} grid={grid} diag={diag} />
-        </div>
-        <div className="col-6">
-          <Snow gfs={gfs} grid={grid} location={location} />
-        </div>
+        {/* ── 5. IMAGERY — heavy; collapsible ──────────────────────── */}
+        <Section
+          id="imagery"
+          title="Imagery"
+          kicker="radar · satellite · models"
+          note="Live remote-sensing and model graphics. Heavy to load — collapse this to keep the top of the page fast."
+          collapsible
+        >
+          <div className="col-6">
+            <Radar location={location} refreshKey={tick} />
+          </div>
+          <div className="col-6">
+            <RadarHiRes location={location} refreshKey={tick} />
+          </div>
+          <div className="col-6">
+            <Satellite location={location} refreshKey={tick} />
+          </div>
+          <div className="col-6">
+            <ModelMaps location={location} refreshKey={tick} />
+          </div>
+          <div className="col-4">
+            <WindyRadar location={location} />
+          </div>
+          <div className="col-4">
+            <WindyWind location={location} />
+          </div>
+          <div className="col-4">
+            <WindyWaves location={location} />
+          </div>
+        </Section>
 
-        <div className="col-12">
-          <Confidence ensemble={ensemble} />
-        </div>
-
-        <div className="col-4">
-          <AirQuality airQuality={airQuality} />
-        </div>
-        <div className="col-8">
-          <ExtendedForecast forecast={forecast} />
-        </div>
-
-        {/* ── Maps ─────────────────────────────────────────────────── */}
-        <div className="col-6">
-          <Radar location={location} refreshKey={tick} />
-        </div>
-        <div className="col-6">
-          <RadarHiRes location={location} refreshKey={tick} />
-        </div>
-
-        <div className="col-6">
-          <Satellite location={location} refreshKey={tick} />
-        </div>
-        <div className="col-6">
-          <ModelMaps location={location} refreshKey={tick} />
-        </div>
-
-        <div className="col-4">
-          <WindyRadar location={location} />
-        </div>
-        <div className="col-4">
-          <WindyWind location={location} />
-        </div>
-        <div className="col-4">
-          <WindyWaves location={location} />
-        </div>
-
-        {/* Zoom Earth never paints inside an iframe → demoted to a link by the maps */}
-        <div className="col-12">
-          <ZoomEarth location={location} />
-        </div>
-
-        {/* ── Traffic, at the very bottom ──────────────────────────── */}
-        <div className="col-12">
-          <Roads location={location} />
-        </div>
-      </div>
+        {/* ── 6. TRAVEL & EXTERNAL ─────────────────────────────────── */}
+        <Section
+          id="travel"
+          title="Travel &amp; External"
+          kicker="third-party"
+          note="Official DOT maps and links out. These are other people's services embedded here — they can block embedding at any time."
+          collapsible
+          defaultOpen={false}
+        >
+          <div className="col-8">
+            <Roads location={location} />
+          </div>
+          <div className="col-4">
+            <ZoomEarth location={location} />
+          </div>
+        </Section>
+      </main>
 
       <footer className="footer">
         <div>
@@ -262,6 +319,6 @@ export default function App() {
           decisions. Always consult official NWS forecasts and warnings.
         </div>
       </footer>
-    </>
+    </div>
   );
 }

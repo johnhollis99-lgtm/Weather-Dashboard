@@ -10,6 +10,12 @@ import 'leaflet/dist/leaflet.css';
 const isDemo = () => window.location.hash.replace(/^#\/?/, '') === 'sounding-demo';
 window.addEventListener('hashchange', () => window.location.reload());
 
+// index.css is fully scoped under `.wx-dash` so nothing leaks when the dashboard
+// is mounted inside Conductor. The page-level reset (body background/margin) is
+// therefore opt-in, and only this standalone entry point opts in. A host app
+// importing <App /> gets the dashboard's styles and none of its page styles.
+document.body.classList.add('wx-standalone');
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <UnitsProvider>{isDemo() ? <SoundingDemo /> : <App />}</UnitsProvider>
