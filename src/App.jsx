@@ -37,6 +37,8 @@ import Roads from './components/Roads.jsx';
 import DiagnosticSoundingPanel from './components/DiagnosticSoundingPanel.jsx';
 import ExtendedForecast from './components/ExtendedForecast.jsx';
 import Section from './components/Section.jsx';
+import ConditionStrip from './components/ConditionStrip.jsx';
+import SpcOutlook from './components/SpcOutlook.jsx';
 
 const REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
 
@@ -177,6 +179,11 @@ export default function App() {
 
       <AlertsBanner alerts={alerts} />
 
+      {/* Signature element: the next 18 hours as one color-encoded band —
+          precipitation in the radar ramp over a temperature tint, hatched
+          where gusts run high. Sits directly under the header so the shape of
+          the day is the first thing read. */}
+      <ConditionStrip gfs={gfs} />
 
       {/* Ordered the way a person actually reads weather: what's happening now,
           what it means, what's coming, then the evidence behind it. */}
@@ -189,7 +196,7 @@ export default function App() {
           note="Measured values from official stations and sensors — no interpretation."
         >
           <div className="col-8">
-            <CurrentConditions obs={obs} forecast={forecast} points={points} />
+            <CurrentConditions obs={obs} forecast={forecast} points={points} gfs={gfs} />
           </div>
           <div className="col-4">
             <AirQuality airQuality={airQuality} />
@@ -246,7 +253,7 @@ export default function App() {
           note="The raw parameters the analysis above is built from. Values marked “derived” are computed in-app; the rest come straight from NWS gridpoint or Open-Meteo GFS output."
         >
           <div className="col-12">
-            <Diagnostics diag={diag} loading={diagLoading} error={diagError} />
+            <Diagnostics diag={diag} location={location} loading={diagLoading} error={diagError} />
           </div>
           <div className="col-12">
             <DiagnosticSoundingPanel location={location} refreshKey={tick} />
@@ -281,6 +288,12 @@ export default function App() {
           </div>
           <div className="col-4">
             <WindyWaves location={location} />
+          </div>
+          {/* National-scale official graphic, so it closes the section: the
+              imagery reads local radar -> regional satellite/model -> national
+              outlook. Full width because it is a CONUS map. */}
+          <div className="col-12">
+            <SpcOutlook />
           </div>
         </Section>
 

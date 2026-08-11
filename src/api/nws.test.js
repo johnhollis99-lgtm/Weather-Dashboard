@@ -31,6 +31,7 @@ const obs = (f = {}) => ({
     windDirection: f.wdir == null ? { value: null } : { value: f.wdir },
     barometricPressure: f.pres == null ? { value: null } : { value: f.pres },
     visibility: f.vis == null ? { value: null } : { value: f.vis },
+    windGust: f.gust == null ? { value: null } : { value: f.gust },
     textDescription: f.sky ?? null,
   },
 });
@@ -135,6 +136,51 @@ describe('getLatestObservation — station walk', () => {
     expect(o.windDir).toBe(180); // both from B, never 999 from C
     expect(o.fieldSources.windSpeedKmh).toBe('B');
     expect(o.fieldSources.windDir).toBe('B');
+  });
+
+  it('never takes a gust from a different station than the wind', async () => {
+    // Regression: gust was composited independently, pairing HMDC1's 9 mph wind
+    // with another site's 2 km/h gust and rendering "SSW 9 mph, gusting 2 mph".
+    mockNws(
+      [
+        feat('A', 'wind but no gust', 39.1, -120.0),
+        feat('B', 'unrelated gust', 39.4, -120.4),
+      ],
+      {
+        A: obs({ temp: 20, dewp: 5, rh: 40, wspd: 14, wdir: 200, pres: 101000, vis: 16000, sky: 'Clear' }),
+        B: obs({ wspd: 3, wdir: 10, gust: 2 }),
+      },
+    );
+    const o = await getLatestObservation(STATIONS_URL, 39.0968, -120.0324);
+    expect(o.station).toBe('A');
+    expect(o.windSpeedKmh).toBe(14);
+    expect(o.windGustKmh).toBeNull(); // A reports none; B's is not borrowed
+    expect(o.fieldSources.windGustKmh).toBeUndefined();
+  });
+
+  it('carries the gust along when the WIND itself is composited', async () => {
+    mockNws(
+      [
+        feat('A', 'no wind', 39.1, -120.0),
+        feat('B', 'wind + gust', 39.2, -120.1),
+      ],
+      {
+        A: obs({ temp: 20, dewp: 5, rh: 40, pres: 101000, vis: 16000, sky: 'Clear' }),
+        B: obs({ wspd: 12, wdir: 180, gust: 30 }),
+      },
+    );
+    const o = await getLatestObservation(STATIONS_URL, 39.0968, -120.0324);
+    expect(o.windSpeedKmh).toBe(12);
+    expect(o.windGustKmh).toBe(30); // same station as the wind
+    expect(o.fieldSources.windGustKmh).toBe('B');
+  });
+
+  it('does not let the unscored gust field mask an incomplete station', async () => {
+    // `covered` counts CORE fields only; a gust must not make wave 1 look done.
+    mockNws([feat('A', 'gust only', 39.1, -120.0)], { A: obs({ temp: 20, gust: 40 }) });
+    const o = await getLatestObservation(STATIONS_URL, 39.0968, -120.0324);
+    expect(o.temperatureC).toBe(20);
+    expect(o.visibilityM).toBeNull();
   });
 
   it('derives dewpoint from RH when a station reports humidity only', async () => {

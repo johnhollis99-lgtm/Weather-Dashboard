@@ -2,10 +2,11 @@
 // plain-language read. Fed by the rule-based analysis engine (briefing()).
 export default function Summary({ briefing, loading, error }) {
   return (
-    <section className="panel summary-panel">
+    <section className="panel summary-panel panel-derived">
       <div className="panel-head">
         <span className="panel-title">📋 Briefing</span>
-        <span className="panel-sub">Claude's interpretation — what's happening, what's next, why</span>
+        <span className="panel-badge" title="Computed or interpreted in-app — not official output">Derived</span>
+        <span className="panel-sub">Claude’s interpretation — what’s happening, what’s next, why</span>
       </div>
       <div className="panel-body">
         {loading && !briefing ? (

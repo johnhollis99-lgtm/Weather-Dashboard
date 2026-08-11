@@ -1,16 +1,15 @@
 import Panel, { ResourceState } from './Panel.jsx';
 import { nearestHourIndex } from '../lib/diagnostics.js';
 import { fmt } from '../lib/units.js';
+import { aqiBand, readableOn } from '../lib/palette.js';
 
-function aqiCategory(aqi) {
-  if (aqi == null) return { label: '—', color: '#5e6e7d' };
-  if (aqi <= 50) return { label: 'Good', color: '#4caf85' };
-  if (aqi <= 100) return { label: 'Moderate', color: '#e0b341' };
-  if (aqi <= 150) return { label: 'Unhealthy (Sensitive)', color: '#f59e42' };
-  if (aqi <= 200) return { label: 'Unhealthy', color: '#ef6b5a' };
-  if (aqi <= 300) return { label: 'Very Unhealthy', color: '#a06cd5' };
-  return { label: 'Hazardous', color: '#9b2c2c' };
-}
+// Category colors come from palette.js, which carries EPA/AirNow's OFFICIAL
+// hexes. This panel previously used softened approximations (#4caf85 for Good,
+// #e0b341 for Moderate, …) — pleasant, but they break the calibration every
+// reader already has from AirNow maps. The official values are used exactly,
+// and only ever as a FILL with an auto-picked label color, because several of
+// them fail contrast as text on a dark ground.
+const aqiCategory = aqiBand;
 
 export default function AirQuality({ airQuality }) {
   const data = airQuality?.data;
@@ -25,9 +24,16 @@ export default function AirQuality({ airQuality }) {
     body = (
       <>
         <div className="aqi-big">
-          <div className="aqi-dot" style={{ background: cat.color }}>{aqi != null ? Math.round(aqi) : '—'}</div>
+          <div className="aqi-dot" style={{ background: cat.fill, color: readableOn(cat.fill) }}>
+            {aqi != null ? Math.round(aqi) : '—'}
+          </div>
           <div>
-            <div className="aqi-cat" style={{ color: cat.color }}>{cat.label}</div>
+            {/* Category as a filled swatch, not colored text: EPA's "Very
+                Unhealthy" (#8F3F97) is 2.6:1 and "Hazardous" (#7E0023) is
+                1.5:1 against this ground, so as text they would fail AA. */}
+            <div className="aqi-cat-chip" style={{ background: cat.fill, color: readableOn(cat.fill) }}>
+              {cat.label}
+            </div>
             <div className="obs-note">US AQI · relevant for wildfire smoke</div>
           </div>
         </div>
@@ -41,7 +47,7 @@ export default function AirQuality({ airQuality }) {
           {trend.map((v, k) => (
             <div
               key={k}
-              style={{ height: `${(v / tmax) * 100}%`, background: aqiCategory(v).color }}
+              style={{ height: `${(v / tmax) * 100}%`, background: aqiCategory(v).fill }}
               title={`${Math.round(v)}`}
             />
           ))}

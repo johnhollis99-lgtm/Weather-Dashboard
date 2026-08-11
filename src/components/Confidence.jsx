@@ -39,7 +39,7 @@ export default function Confidence({ ensemble }) {
     );
   }
   return (
-    <Panel title="Forecast Confidence" sub="Open-Meteo ensemble (gfs_seamless)">
+    <Panel title="Forecast Confidence" sub="Open-Meteo ensemble (gfs_seamless)" kind="derived">
       <ResourceState resource={ensemble}>{body}</ResourceState>
     </Panel>
   );

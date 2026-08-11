@@ -121,3 +121,36 @@ describe('unit-invariant quantities', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Surface pressure and visibility follow the toggle.
+// ---------------------------------------------------------------------------
+// Current Conditions used to hardcode °F/mph and quote pressure and visibility
+// in fixed US units, so the header's °C·m toggle silently did not apply to that
+// panel. These quantities now live in the registry like everything else.
+describe('surface pressure & visibility follow the display system', () => {
+  it('formats surface pressure as inHg (imperial) and hPa (metric)', () => {
+    // 101325 Pa = standard sea-level pressure = 29.92 inHg = 1013 hPa
+    expect(display('pressureSurface', 101325, 'imperial')).toBe('29.92 inHg');
+    expect(display('pressureSurface', 101325, 'metric')).toBe('1,013 hPa');
+  });
+
+  it('formats visibility as statute miles (imperial) and km (metric)', () => {
+    // NWS reports unrestricted visibility as 10 statute miles = 16093.4 m
+    expect(display('visibility', 16093.44, 'imperial')).toBe('10.0 mi');
+    expect(display('visibility', 16093.44, 'metric')).toBe('16.1 km');
+  });
+
+  it('keeps PRESSURE LEVELS unit-invariant — a 500 hPa chart is 500 hPa everywhere', () => {
+    // The upper-air `pressure` quantity is deliberately NOT the same as the
+    // observed surface `pressureSurface` quantity.
+    expect(display('pressure', 500, 'imperial')).toBe(display('pressure', 500, 'metric'));
+  });
+
+  it('is null-safe in both systems', () => {
+    for (const sys of ['imperial', 'metric']) {
+      expect(display('pressureSurface', null, sys)).toBe('—');
+      expect(display('visibility', null, sys)).toBe('—');
+    }
+  });
+});

@@ -20,6 +20,8 @@ export async function getGfs(lat, lon) {
     'total_column_integrated_water_vapour', // PWAT (kg/m² = mm); Open-Meteo's current name
     'boundary_layer_height',
     'freezing_level_height',
+    'surface_pressure', // model pressure history for the stat-card sparkline
+
     'snowfall',
     'snow_depth',
     'precipitation',
@@ -35,9 +37,13 @@ export async function getGfs(lat, lon) {
     'geopotential_height_700hPa',
     'geopotential_height_500hPa',
   ].join(',');
+  // `past_days=1` guarantees a real trailing 24 h for the stat-card sparklines.
+  // Without it the series starts at local midnight, so at 06:00 a "24-hour
+  // trend" would be six points. Index-safe: every consumer locates "now" via
+  // nearestHourIndex() against the timestamps, never a fixed offset.
   const url =
     `https://api.open-meteo.com/v1/gfs?latitude=${lat}&longitude=${lon}` +
-    `&hourly=${hourly}&forecast_days=3&timezone=auto`;
+    `&hourly=${hourly}&forecast_days=3&past_days=1&timezone=auto`;
   return getJSON(url);
 }
 

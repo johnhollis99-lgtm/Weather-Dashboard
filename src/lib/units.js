@@ -10,6 +10,10 @@ export const msToMph = (ms) => (ms == null ? null : ms * 2.236936);
 export const mToFt = (m) => (m == null ? null : m * 3.28084);
 export const mmToIn = (mm) => (mm == null ? null : mm / 25.4);
 export const cmToIn = (cm) => (cm == null ? null : cm / 2.54);
+export const paToInHg = (pa) => (pa == null ? null : pa / 3386.389);
+export const paToHpa = (pa) => (pa == null ? null : pa / 100);
+export const mToMiles = (m) => (m == null ? null : m / 1609.344);
+export const mToKm = (m) => (m == null ? null : m / 1000);
 
 export function fmt(n, digits = 0) {
   if (n == null || Number.isNaN(n)) return '—';
@@ -113,10 +117,23 @@ const REGISTRY = {
     metric: { to: id, digits: 1, suffix: 'm/s' },
   },
   // ── Identical in both systems (meteorological convention) ──
-  // Pressure: hPa (== mb), never converted.
+  // Upper-air / model pressure LEVELS: hPa (== mb), never converted — a
+  // 500 hPa chart is 500 hPa everywhere.
   pressure: {
     imperial: { to: id, digits: 0, suffix: 'hPa' },
     metric: { to: id, digits: 0, suffix: 'hPa' },
+  },
+  // Surface station pressure (an OBSERVED altimeter reading, internal Pa) is a
+  // different quantity from a pressure level and DOES follow the toggle: US
+  // surface observations are quoted in inHg, the rest of the world in hPa.
+  pressureSurface: {
+    imperial: { to: paToInHg, digits: 2, suffix: 'inHg' },
+    metric: { to: paToHpa, digits: 0, suffix: 'hPa' },
+  },
+  // Visibility: internal m. Imperial → statute miles (NWS convention).
+  visibility: {
+    imperial: { to: mToMiles, digits: 1, suffix: 'mi' },
+    metric: { to: mToKm, digits: 1, suffix: 'km' },
   },
   // CAPE / CIN: J/kg to nearest 10, identical in both systems.
   cape: {

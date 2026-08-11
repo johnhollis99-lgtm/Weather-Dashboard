@@ -95,6 +95,18 @@ const CORE_FIELDS = [
   ['textDescription', (o) => o.textDescription || null],
 ];
 
+// Read but NOT scored: a station reporting no gust is usually reporting "no
+// gusts", not an incomplete observation, so counting it would wrongly penalise
+// calm sites and push the walk further out.
+//
+// Gust is also NOT composited independently. A gust only means anything next to
+// the sustained wind it gusts above, so it is taken from whichever station
+// supplied the wind — the same rule that keeps speed and direction together.
+// Compositing it separately produced "SSW 9 mph, gusting 2 mph" by pairing one
+// station's wind with another's gust.
+const EXTRA_FIELDS = [['windGustKmh', (o) => o.windGust?.value]];
+const WIND_BOUND_FIELDS = new Set(['windGustKmh']);
+
 const R_EARTH_KM = 6371;
 const rad = (d) => (d * Math.PI) / 180;
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -128,7 +140,12 @@ async function probeStation(feature, lat, lon) {
     const v = read(o);
     if (v != null) fields[key] = v;
   }
-  return { ...base, ok: true, timestamp: o.timestamp, fields, score: Object.keys(fields).length };
+  const score = Object.keys(fields).length; // scored on CORE fields only
+  for (const [key, read] of EXTRA_FIELDS) {
+    const v = read(o);
+    if (v != null) fields[key] = v;
+  }
+  return { ...base, ok: true, timestamp: o.timestamp, fields, score };
 }
 
 /**
@@ -161,7 +178,12 @@ export async function getLatestObservation(observationStationsUrl, lat, lon) {
 
   // Wave 2: only if nothing in wave 1 is complete, and only far enough to fill
   // the gaps. Union of fields present so far decides whether it's needed.
-  const covered = new Set(reporting.flatMap((c) => Object.keys(c.fields)));
+  // Count CORE coverage only — the unscored extras must not make an incomplete
+  // wave look complete and skip wave 2.
+  const coreKeys = new Set(CORE_FIELDS.map(([k]) => k));
+  const covered = new Set(
+    reporting.flatMap((c) => Object.keys(c.fields)).filter((k) => coreKeys.has(k)),
+  );
   if (covered.size < CORE_FIELDS.length && features.length > STATION_WAVE) {
     const more = await Promise.all(
       features.slice(STATION_WAVE, MAX_STATION_TRIES).map((f) => probeStation(f, lat, lon)),
@@ -186,13 +208,16 @@ export async function getLatestObservation(observationStationsUrl, lat, lon) {
     stationsUsed: [{ id: primary.id, name: primary.name, distanceKm: primary.distanceKm }],
     composited: false,
   };
-  for (const [key] of CORE_FIELDS) out[key] = primary.fields[key] ?? null;
+  for (const [key] of [...CORE_FIELDS, ...EXTRA_FIELDS]) out[key] = primary.fields[key] ?? null;
 
   // Composite anything the primary is missing from the next-nearest station
   // that has it. Wind is filled as a PAIR so we never report a direction from
   // one site with a speed from another.
-  for (const [key] of CORE_FIELDS) {
+  for (const [key] of [...CORE_FIELDS, ...EXTRA_FIELDS]) {
     if (out[key] != null) continue;
+    // Gust is meaningless apart from the wind it gusts above, so it never gets
+    // its own donor — it rides along with whichever station supplied the wind.
+    if (WIND_BOUND_FIELDS.has(key)) continue;
     const donor = reporting.find((c) => c !== primary && c.fields[key] != null);
     if (!donor) continue;
     if (key === 'windSpeedKmh' || key === 'windDir') {
@@ -202,8 +227,10 @@ export async function getLatestObservation(observationStationsUrl, lat, lon) {
       if (!pairDonor) continue;
       out.windSpeedKmh = pairDonor.fields.windSpeedKmh;
       out.windDir = pairDonor.fields.windDir;
+      out.windGustKmh = pairDonor.fields.windGustKmh ?? null; // same station, always
       out.fieldSources.windSpeedKmh = pairDonor.id;
       out.fieldSources.windDir = pairDonor.id;
+      if (pairDonor.fields.windGustKmh != null) out.fieldSources.windGustKmh = pairDonor.id;
       if (!out.stationsUsed.some((s) => s.id === pairDonor.id)) {
         out.stationsUsed.push({ id: pairDonor.id, name: pairDonor.name, distanceKm: pairDonor.distanceKm });
       }

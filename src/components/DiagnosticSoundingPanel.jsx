@@ -61,7 +61,7 @@ export default function DiagnosticSoundingPanel({ location, refreshKey }) {
   const chart = (p) => <DiagnosticSounding profile={p} units={system} theme="dark" />;
 
   return (
-    <Panel title="Diagnostic Sounding — annotated Skew-T" sub={sub}>
+    <Panel title="Diagnostic Sounding — annotated Skew-T" sub={sub} kind="derived">
       {state.loading && !state.data ? (
         <div className="state">
           <span className="spinner" /> Building sounding…

@@ -11,7 +11,7 @@ export default function Analysis({ diag, sum, location, loading, error }) {
   const result = diag ? analyze(diag, sum, location) : null;
 
   return (
-    <Panel title="Meteorological Analysis" sub="rule-based interpretation of the raw numbers">
+    <Panel title="Meteorological Analysis" sub="rule-based interpretation of the raw numbers" kind="derived">
       {loading && !diag ? (
         <div className="state"><span className="spinner" /> Loading…</div>
       ) : error && !diag ? (

@@ -1,6 +1,8 @@
 import Panel, { ResourceState } from './Panel.jsx';
+import Sparkline from './Sparkline.jsx';
 import { pickGridValue, nearestHourIndex } from '../lib/diagnostics.js';
 import { fmt, kmhToMph, windDir, wallHour } from '../lib/units.js';
+import { seriesAround } from '../lib/series.js';
 
 // Wind: NWS gridpoint + Open-Meteo 10m winds/gusts, transport wind, 500 mb wind,
 // an 18-hour gust timeline, and wind-advisory-threshold flags.
@@ -34,6 +36,12 @@ export default function Wind({ gfs, grid, diag }) {
     const nGust = grid?.data ? pickGridValue(grid.data, 'windGust') : null;
     const nDir = grid?.data ? pickGridValue(grid.data, 'windDirection') : null;
 
+    // Trailing 24 h for the stat cards that have hourly history (mph, so the
+    // sparkline shape matches the number above it).
+    const spdTrend = seriesAround(data, 'wind_speed_10m', 24, kmhToMph);
+    const gustTrend = seriesAround(data, 'wind_gusts_10m', 24, kmhToMph);
+    const w500Trend = seriesAround(data, 'wind_speed_500hPa', 24, kmhToMph);
+
     // From diagnostics: transport wind + 500 mb wind.
     const tws = diag?.nws?.transportWindSpeed;
     const twd = diag?.nws?.transportWindDirection;
@@ -44,12 +52,12 @@ export default function Wind({ gfs, grid, diag }) {
       <>
         {adv && <div className={`finding ${adv.level}`} style={{ marginBottom: 12 }}><div className="f-title">⚠ {adv.text}</div></div>}
         <div className="diag-grid">
-          <Metric label="Surface wind (Open-Meteo)" value={data.hourly.wind_speed_10m?.[i] != null ? `${windDir(h.wind_direction_10m?.[i])} ${fmt(kmhToMph(h.wind_speed_10m[i]))}` : null} unit="mph" />
-          <Metric label="Surface gust (Open-Meteo)" value={h.wind_gusts_10m?.[i] != null ? fmt(kmhToMph(h.wind_gusts_10m[i])) : null} unit="mph" />
+          <Metric label="Surface wind (Open-Meteo)" value={data.hourly.wind_speed_10m?.[i] != null ? `${windDir(h.wind_direction_10m?.[i])} ${fmt(kmhToMph(h.wind_speed_10m[i]))}` : null} unit="mph" spark={spdTrend} sparkLabel="Surface wind, past 24 h" />
+          <Metric label="Surface gust (Open-Meteo)" value={h.wind_gusts_10m?.[i] != null ? fmt(kmhToMph(h.wind_gusts_10m[i])) : null} unit="mph" spark={gustTrend} sparkLabel="Surface gusts, past 24 h" />
           <Metric label="Surface wind (NWS)" value={nSpd?.value != null ? `${windDir(nDir?.value)} ${fmt(kmhToMph(nSpd.value))}` : null} unit="mph" />
           <Metric label="Wind gust (NWS)" value={nGust?.value != null ? fmt(kmhToMph(nGust.value)) : null} unit="mph" />
           <Metric label="Transport wind" value={tws?.value != null ? `${windDir(twd?.value)} ${fmt(kmhToMph(tws.value))}` : null} unit="mph" />
-          <Metric label="500 mb wind" value={w500 != null ? `${windDir(d500)} ${fmt(kmhToMph(w500))}` : null} unit="mph" />
+          <Metric label="500 mb wind" value={w500 != null ? `${windDir(d500)} ${fmt(kmhToMph(w500))}` : null} unit="mph" spark={w500Trend} sparkLabel="500 mb wind, past 24 h" />
         </div>
 
         <div className="diag-section-title">Next 18 hours — gusts (mph)</div>
@@ -78,12 +86,16 @@ export default function Wind({ gfs, grid, diag }) {
   );
 }
 
-function Metric({ label, value, unit }) {
+// `spark` is a {values, nowIndex} window from series.js. The slot is rendered
+// at a fixed height whether or not a series lands in it, so a card is the same
+// height before and after data arrives — no shift on the 5-minute refresh.
+function Metric({ label, value, unit, spark, sparkLabel }) {
   if (value == null) {
     return (
       <div className="metric na">
         <div className="m-label">{label}</div>
         <div className="m-value">n/a</div>
+        <div className="m-spark" />
       </div>
     );
   }
@@ -91,6 +103,9 @@ function Metric({ label, value, unit }) {
     <div className="metric">
       <div className="m-label">{label}</div>
       <div className="m-value">{value}{unit ? <span className="m-unit"> {unit}</span> : null}</div>
+      <div className="m-spark">
+        {spark && <Sparkline values={spark.values} nowIndex={spark.nowIndex} label={sparkLabel} height={20} />}
+      </div>
     </div>
   );
 }

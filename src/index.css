@@ -715,3 +715,512 @@ body.wx-standalone #root { min-height: 100vh; }
 .wx-dash .cc-src { color: var(--accent); font-size: 11px; cursor: help; }
 .wx-dash .cc-composite { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 10px; }
 
+/* ==========================================================================
+   PHASE 4 — "instrument panel with a pulse"
+   ==========================================================================
+   Color is a data channel, never a mood. The ground is dark and disciplined;
+   every bright color on screen carries meteorological meaning, drawn from the
+   official vocabularies in src/lib/palette.js. There is exactly one decorative
+   color (--accent) and it is reserved for interactive chrome.
+
+   This block layers over the earlier phases: it REMAPS the existing tokens to
+   the new palette (so every rule above inherits the redesign) and then adds the
+   Phase 4 components.
+   ========================================================================== */
+
+/* ---- Vendored type. Self-hosted woff2, latin subset (~112 kB total). No CDN
+   at runtime: this dashboard is offline-capable and keyless, and a webfont host
+   would be the only external dependency on the page. Paths are RELATIVE so Vite
+   hashes them and rewrites under the /weather/ base for the Conductor build. */
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("./fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("./fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans Condensed";
+  src: url("./fonts/ibm-plex-sans-condensed-latin-600-normal.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans Condensed";
+  src: url("./fonts/ibm-plex-sans-condensed-latin-700-normal.woff2") format("woff2");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("./fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("./fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+
+.wx-dash {
+  /* ---- Ground and ink. Dark slate, not pure black — the ground of a night
+     surface-analysis chart. Contrast measured against --bg-panel:
+     ink-0 14.1:1 - ink-1 7.9:1 - ink-2 4.7:1 — all pass AA, including the
+     caption tier where most dashboards fail. */
+  --surface-0: #12161d;
+  --surface-1: #1a202a;
+  --surface-2: #232b37;
+  --ink-0: #e9eff5;
+  --ink-1: #a6b6c4;
+  --ink-2: #7c8c9a;
+
+  /* Remap the legacy tokens so every earlier rule inherits the new palette. */
+  --bg: var(--surface-0);
+  --bg-panel: var(--surface-1);
+  --bg-panel-2: var(--surface-2);
+  --border: #2a3542;
+  --text: var(--ink-0);
+  --text-dim: var(--ink-1);
+  --text-faint: var(--ink-2);
+
+  /* The single decorative color: interactive chrome only. Cyan sits outside
+     every semantic ramp, so an affordance can never read as a hazard level. */
+  --accent: #5ac8e0;
+
+  /* Significance tiers — mirrors TIER_FILL in palette.js. */
+  --tier-nil: #5a6b78;
+  --tier-low: #3fa96b;
+  --tier-moderate: #e5a93c;
+  --tier-high: #e0522f;
+  --tier-extreme: #c2379b;
+
+  --good: var(--tier-low);
+  --info: var(--accent);
+  --watch: var(--tier-moderate);
+  --warn: var(--tier-high);
+  --good-bg: #14251c;
+  --info-bg: #0f2530;
+  --watch-bg: #2a2317;
+  --warn-bg: #2b1a15;
+
+  --spark-ink: var(--ink-2);
+
+  /* ---- Type. Display = condensed (more label per unit width, as instrument
+     panels do); body = Plex Sans; data = Plex Mono with tabular figures. */
+  --font-display: "IBM Plex Sans Condensed", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* Explicit scale — 1.2 minor third off a 13px base. No ad-hoc sizes. */
+  --fs-kicker: 10px;
+  --fs-caption: 12px;
+  --fs-body: 13px;
+  --fs-panel: 15px;
+  --fs-section: 18px;
+  --fs-read: 22px;
+  --fs-stat: 32px;
+  --fs-headline: 46px;
+
+  /* ---- Spacing, 4px base. */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+}
+body.wx-standalone { background: #12161d; color: #e9eff5; }
+
+/* ---- NUMBER FIRST, LABEL WHISPERED (aviation-display hierarchy) -----------
+   Every data readout is tabular-figure Mono so values align on the decimal and
+   do not reflow when they update on the 5-minute refresh. */
+.wx-dash .m-value,
+.wx-dash .cc-temp,
+.wx-dash .cc-row .v,
+.wx-dash .h-temp,
+.wx-dash .aqi-dot,
+.wx-dash .frame-label,
+.wx-dash .cstrip-ticks {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.wx-dash .m-value { font-size: 17px; font-weight: 500; color: var(--ink-0); letter-spacing: -0.01em; }
+.wx-dash .m-label,
+.wx-dash .cc-row .k {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--ink-1);
+  letter-spacing: 0.01em;
+}
+.wx-dash .m-unit { font-size: 11px; color: var(--ink-2); font-weight: 400; }
+
+/* ---- Display face on the landmarks ---- */
+.wx-dash .app-title,
+.wx-dash .wx-section-title,
+.wx-dash .panel-title,
+.wx-dash .diag-section-title {
+  font-family: var(--font-display);
+  letter-spacing: 0;
+}
+.wx-dash .panel-title { font-size: var(--fs-panel); font-weight: 600; }
+.wx-dash .wx-section-title { font-size: var(--fs-section); font-weight: 700; }
+.wx-dash #the-read .wx-section-title { font-size: var(--fs-read); }
+.wx-dash .app-title { font-size: 17px; font-weight: 700; }
+
+/* ---- Density: instrument panel, not marketing page ---- */
+.wx-dash .panel-body { padding: var(--sp-3); }
+.wx-dash .panel-head { padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); }
+.wx-dash .grid { gap: var(--sp-3); padding-left: var(--sp-4); padding-right: var(--sp-4); }
+.wx-dash .diag-grid { gap: var(--sp-2); }
+.wx-dash .metric { padding: var(--sp-2); }
+
+/* ==========================================================================
+   Provenance device — derived vs official.
+   The distinction this dashboard exists for, carried by TEXTURE + TEXT so it
+   survives color-blindness and greyscale. The 45deg hatch is borrowed from
+   SPC's own convention for significant-severe areas: the visual language comes
+   from the subject, not from a UI kit.
+   ========================================================================== */
+.wx-dash .panel { position: relative; }
+.wx-dash .panel::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 10px 0 0 10px;
+  background: var(--ink-2);
+}
+.wx-dash .panel-derived::before {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--tier-moderate) 0 2px,
+    transparent 2px 5px
+  );
+}
+.wx-dash .panel-badge {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tier-moderate);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Threshold chips — significance at a glance.
+   Filled swatch + band NAME in text. Never color alone.
+   ========================================================================== */
+.wx-dash .chip {
+  display: inline-block;
+  margin-top: var(--sp-1);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--font-body);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* ==========================================================================
+   Sparklines — "the pulse" under a stat.
+   Fixed height + fixed viewBox: the path changes on refresh, the box does not,
+   so there is zero layout shift on the 5-minute cycle.
+   ========================================================================== */
+.wx-dash .spark-line { display: block; width: 100%; overflow: visible; }
+/* Constrained under the headline number so it reads as a trend mark rather
+   than a stray rule across the panel. */
+.wx-dash .cc-headline .spark-line { max-width: 220px; margin-top: 2px; }
+
+/* ==========================================================================
+   SIGNATURE — the condition strip.
+   The next 18 hours as one continuous color-encoded band: reflectivity ramp
+   for precipitation over a temperature tint, hatched where gusts run high.
+   ========================================================================== */
+.wx-dash .cstrip { margin: var(--sp-2) var(--sp-4) 0; }
+.wx-dash .cstrip-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--surface-1);
+}
+.wx-dash .cstrip-cell { position: relative; }
+.wx-dash .cstrip-cell + .cstrip-cell { border-left: 1px solid rgba(0, 0, 0, 0.25); }
+/* Temperature is a TINT, never a flood — it must not drown the precipitation
+   channel painted over it. */
+/* The tint has to be strong enough that the day's temperature curve actually
+   reads across the band — at 0.30 over this ground it washed out to a flat
+   bar. Precipitation still dominates wherever it exists (0.92 over the top). */
+.wx-dash .cstrip-temp { position: absolute; inset: 0; opacity: 0.62; }
+.wx-dash .cstrip-precip { position: absolute; inset: 0; opacity: 0.92; }
+/* Wind: hatching, the third channel, readable over any fill beneath it. */
+.wx-dash .cstrip-cell.is-windy::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(233, 239, 245, 0.55) 0 1px,
+    transparent 1px 4px
+  );
+}
+.wx-dash .cstrip-now {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--ink-0);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+.wx-dash .cstrip-ticks {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  margin-top: 3px;
+  font-size: 9px;
+  color: var(--ink-2);
+}
+.wx-dash .cstrip-tick { text-align: left; padding-left: 1px; white-space: nowrap; }
+.wx-dash .cstrip-empty .cstrip-track { opacity: 0.4; }
+
+/* ==========================================================================
+   Station model — meteorology's own glyph, five variables in one mark.
+   ========================================================================== */
+.wx-dash .station-model { width: 104px; height: 88px; flex: 0 0 auto; }
+.wx-dash .sm-disc { fill: none; stroke: var(--ink-1); stroke-width: 1.5; }
+.wx-dash .sm-fill { fill: var(--ink-0); }
+.wx-dash .sm-divider { stroke: var(--ink-1); stroke-width: 1.2; }
+.wx-dash .sm-barb { stroke: var(--ink-0); stroke-width: 1.5; stroke-linecap: round; }
+.wx-dash .sm-calm { fill: none; stroke: var(--ink-2); stroke-width: 1.2; }
+.wx-dash .sm-temp,
+.wx-dash .sm-dew {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 500;
+}
+.wx-dash .sm-temp { fill: #ef8a5a; }
+.wx-dash .sm-dew { fill: #46c08a; }
+
+/* ---- Current conditions layout ---- */
+.wx-dash .cc-main { display: flex; align-items: center; gap: var(--sp-3); }
+.wx-dash .cc-headline { flex: 1; min-width: 0; }
+.wx-dash .cc-temp {
+  font-size: var(--fs-headline);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-0);
+  /* Temperature ramp as a hairline accent under the headline number — a tint
+     on the rule, not a background flood behind the text. */
+  border-bottom: 2px solid var(--temp-tint, transparent);
+  display: inline-block;
+  padding-bottom: 2px;
+}
+.wx-dash .cc-temp-unit { font-size: 18px; color: var(--ink-2); margin-left: 2px; }
+.wx-dash .cc-cond { font-size: var(--fs-caption); color: var(--ink-1); margin-top: 2px; }
+.wx-dash .cc-grid { margin-top: var(--sp-3); }
+.wx-dash .cc-row .v { font-size: 13px; }
+.wx-dash .cc-na { color: var(--ink-2); }
+.wx-dash .cc-src { color: var(--accent); font-size: 11px; cursor: help; }
+.wx-dash .cc-composite {
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+/* ---- "The Read" is the signed analysis: give it the most prominent surface. */
+.wx-dash .summary-panel { background: var(--surface-2); }
+.wx-dash .summary-panel .brief-setup {
+  font-size: 15px;
+  line-height: 1.65;
+  max-width: 68ch; /* comfortable measure for actual reading */
+  color: var(--ink-0);
+}
+
+/* ---- Quality floor ------------------------------------------------------- */
+.wx-dash :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wx-dash *, .wx-dash *::before, .wx-dash *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .wx-dash .spinner { animation: none !important; border-top-color: var(--accent); }
+}
+
+@media (max-width: 700px) {
+  .wx-dash { --fs-headline: 38px; }
+  .wx-dash .cstrip { margin-left: var(--sp-3); margin-right: var(--sp-3); }
+  .wx-dash .station-model { width: 84px; height: 72px; }
+}
+
+/* AQI category as a filled swatch (official EPA hexes need an auto ink). */
+.wx-dash .aqi-cat-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ==========================================================================
+   PHASE 4.1 — vibrancy & instrument polish
+   ==========================================================================
+   Additions and tuning only. The palette architecture, semantic vocabularies,
+   provenance device, type system and section structure from Phase 4 all stand.
+   What changes: numbers get a brighter ink tier, cards get a real edge, every
+   stat that has history gets a trend, and wind gets a dial.
+   ========================================================================== */
+
+.wx-dash {
+  /* Data numerals sit one step brighter than prose. This is the single move
+     that makes an instrument panel read as an instrument rather than a
+     document: labels recede, values come forward. Measured on --surface-1:
+     17.1:1 (vs 14.1:1 for --ink-0 body text). */
+  --ink-value: #f5f9fd;
+
+  /* Panel boundaries you can feel. A hairline white wash reads as a lit edge
+     against the slate ground, which is what gives the reference boards their
+     crispness — it is not a decorative color, it is an edge. */
+  --edge: rgba(255, 255, 255, 0.07);
+  --edge-top: rgba(255, 255, 255, 0.10);
+}
+
+/* ---- Value tier ---------------------------------------------------------- */
+.wx-dash .m-value,
+.wx-dash .cc-temp,
+.wx-dash .cc-row .v,
+.wx-dash .aqi-big .aqi-dot,
+.wx-dash .wd-speed {
+  color: var(--ink-value);
+}
+/* Units and the "no data" dash stay quiet so they never compete with a value. */
+.wx-dash .m-unit,
+.wx-dash .cc-na,
+.wx-dash .cc-temp-unit {
+  color: var(--ink-2);
+}
+
+/* ---- Card edge definition ------------------------------------------------ */
+.wx-dash .panel {
+  border-color: var(--edge);
+  /* 1px lit top edge — the light source is above, as on a physical panel. */
+  box-shadow: inset 0 1px 0 0 var(--edge-top);
+}
+.wx-dash .panel-head { border-bottom-color: var(--edge); }
+.wx-dash .metric {
+  border-color: var(--edge);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+.wx-dash .cstrip-track { border-color: var(--edge); }
+
+/* ---- Column balance ------------------------------------------------------
+   Grid items stretched to the tallest in their row, so a short panel beside a
+   tall one became a mostly-empty card rather than a short card. Sizing to
+   content turns that dead space back into page ground. 380px is unaffected —
+   it is single-column, where every item is already full width. */
+.wx-dash .grid { align-items: start; }
+
+/* ---- Sparkline slots -----------------------------------------------------
+   Every slot has a fixed height whether or not a series lands in it, so a card
+   is exactly as tall before data arrives as after. That is what keeps the
+   5-minute refresh at zero layout shift. */
+.wx-dash .m-spark { height: 20px; margin-top: 4px; }
+.wx-dash .cc-spark-slot { height: 30px; margin-top: 2px; }
+.wx-dash .cc-row-spark { height: 18px; width: 62px; flex: 0 0 62px; }
+.wx-dash .cc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wx-dash .cc-row .k { flex: 1 1 auto; min-width: 0; }
+.wx-dash .cc-row .v { flex: 0 0 auto; text-align: right; white-space: nowrap; }
+
+/* Slightly more present than a hairline: at the new value brightness a 1.5px
+   stroke with a 0.30 area wash was disappearing under the numerals. */
+.wx-dash .spark-line path[stroke] { stroke-width: 1.6; }
+
+/* ---- Wind dial ----------------------------------------------------------- */
+.wx-dash .wind-dial-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.wx-dash .wind-dial { width: 108px; height: 108px; }
+.wx-dash .wd-ring { fill: none; stroke: var(--edge); stroke-width: 1; }
+.wx-dash .wd-tick { stroke: var(--ink-2); stroke-width: 1; opacity: 0.5; }
+.wx-dash .wd-tick-major { stroke: var(--ink-1); stroke-width: 1.5; }
+.wx-dash .wd-card {
+  font-family: var(--font-body);
+  font-size: 8px;
+  font-weight: 600;
+  fill: var(--ink-2);
+  letter-spacing: 0.04em;
+}
+.wx-dash .wd-needle { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+.wx-dash .wd-needle-head { fill: var(--accent); }
+/* Brief ease so a direction change is legible as motion rather than a jump. */
+.wx-dash .wind-dial .wd-needle-group { transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+.wx-dash .wind-dial.is-static .wd-needle-group { transition: none; }
+.wx-dash .wd-gust { stroke: var(--ink-1); stroke-width: 2.5; stroke-linecap: round; }
+/* The gust marker only takes the threshold color past the SAME gust threshold
+   the condition strip hatches at — one number, one meaning. */
+.wx-dash .wd-gust.is-strong { stroke: var(--tier-moderate); stroke-width: 3; }
+.wx-dash .wd-speed {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: 19px;
+  font-weight: 500;
+  fill: var(--ink-value);
+}
+.wx-dash .wd-speed-unit { font-family: var(--font-body); font-size: 8px; fill: var(--ink-2); }
+.wx-dash .wd-calm {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  fill: var(--ink-1);
+}
+.wx-dash .wind-dial-read { font-size: 11px; text-align: center; line-height: 1.4; }
+.wx-dash .wd-line { display: flex; gap: 6px; justify-content: center; }
+.wx-dash .wd-k { color: var(--ink-2); }
+.wx-dash .wd-v { color: var(--ink-1); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.wx-dash .wd-v.is-strong { color: var(--tier-moderate); font-weight: 500; }
+
+/* ---- AQI trend bars: a touch more presence at the new value brightness --- */
+.wx-dash .spark > div { opacity: 0.92; border-radius: 1px 1px 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wx-dash .wind-dial .wd-needle-group { transition: none !important; }
+}
+
+@media (max-width: 700px) {
+  /* Secondary-row sparklines drop on phones; the headline card keeps its
+     trend, which is the one that earns the width. */
+  .wx-dash .cc-row-spark { display: none; }
+  .wx-dash .wind-dial { width: 92px; height: 92px; }
+  .wx-dash .cc-main { flex-wrap: wrap; }
+}
+
+/* A full-width national map should fill its frame rather than float in it,
+   but never upscale past its native resolution into softness. */
+.wx-dash #imagery .img-frame img { width: 100%; max-width: 1100px; }
+
+/* Hub plate behind the dial numerals — the needle passes behind it, so the
+   speed stays readable at every bearing. */
+.wx-dash .wd-hub { fill: var(--surface-1); stroke: var(--edge); stroke-width: 1; }

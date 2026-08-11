@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import Panel, { ResourceState } from './Panel.jsx';
 import { fmt, localTime } from '../lib/units.js';
 
@@ -10,16 +9,7 @@ import { fmt, localTime } from '../lib/units.js';
 const SEV_CLASS = { Extreme: 'warn', Severe: 'warn', Moderate: 'watch', Minor: 'info', Unknown: 'info' };
 const LEVEL_CLASS = { High: 'warn', Moderate: 'watch', Low: 'info', None: 'good' };
 
-const SPC_IMAGES = [
-  { key: 'day1cat', label: 'Day 1 Convective' },
-  { key: 'day2cat', label: 'Day 2 Convective' },
-  { key: 'day1fire', label: 'Day 1 Fire Wx' },
-  { key: 'day2fire', label: 'Day 2 Fire Wx' },
-];
-
 export default function Hazards({ alerts, sum, hazards }) {
-  const [spc, setSpc] = useState('day1cat');
-  const [spcErr, setSpcErr] = useState(false);
   const s = sum || {};
 
   return (
@@ -55,21 +45,9 @@ export default function Hazards({ alerts, sum, hazards }) {
           <div className="m-value">{s.maxPoP != null ? `${fmt(s.maxPoP)}%` : 'n/a'}</div>
         </div>
       </div>
-      <div className="btn-row" style={{ margin: '10px 0' }}>
-        {SPC_IMAGES.map((x) => (
-          <button key={x.key} className={spc === x.key ? 'active' : ''} onClick={() => { setSpc(x.key); setSpcErr(false); }}>
-            {x.label}
-          </button>
-        ))}
+      <div className="obs-note">
+        SPC national categorical outlooks are in their own panel beside this one.
       </div>
-      <div className="img-frame">
-        {spcErr ? (
-          <div className="state error">⚠ SPC outlook failed to load via proxy (/api/spc-outlook?img={spc})</div>
-        ) : (
-          <img src={`/api/spc-outlook?img=${spc}`} alt={`SPC ${spc}`} onError={() => setSpcErr(true)} />
-        )}
-      </div>
-      <div className="obs-note">SPC national convective &amp; fire-weather outlooks (categorical), proxied inline.</div>
 
       {/* ---- Layer 3: derived assessment ---- */}
       <div className="diag-section-title">③ Derived 18-hour hazard assessment</div>
