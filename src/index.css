@@ -308,6 +308,58 @@ body.wx-standalone #root { min-height: 100vh; }
 .wx-dash .frame-label { font-size: 12px; color: var(--text-dim); min-width: 150px; }
 .wx-dash .frame-label .nowcast { color: var(--watch); }
 
+/* ---- Radar panel: source switcher, legend, frame provenance ---- */
+.wx-dash .radar-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.wx-dash .radar-sources { display: flex; gap: 6px; }
+.wx-dash .radar-src,
+.wx-dash .radar-legend-toggle {
+  font: inherit; font-size: 12px;
+  padding: 4px 10px;
+  color: var(--text-dim);
+  background: var(--bg-panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.wx-dash .radar-src:hover,
+.wx-dash .radar-legend-toggle:hover { color: var(--text); }
+.wx-dash .radar-src.is-active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* The scale is a KEY, not decoration: swatches carry the color, the dBZ number
+   carries the meaning, so it survives greyscale and color-blindness. */
+.wx-dash .radar-legend { margin-top: 10px; }
+.wx-dash .radar-legend-ramp { display: flex; gap: 0; }
+.wx-dash .radar-legend-band { flex: 1; min-width: 0; text-align: center; }
+.wx-dash .radar-legend-swatch { display: block; height: 12px; }
+.wx-dash .radar-legend-band:first-child .radar-legend-swatch { border-radius: 3px 0 0 3px; }
+.wx-dash .radar-legend-band:last-child .radar-legend-swatch { border-radius: 0 3px 3px 0; }
+.wx-dash .radar-legend-label {
+  display: block; margin-top: 3px;
+  font-size: 10px; color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.wx-dash .radar-legend-note { margin: 6px 0 0; font-size: 11px; color: var(--text-faint); }
+
+/* Frame time provenance. IEM publishes no product time, so its clock label is
+   computed from the device — flagged, never presented as observed. */
+.wx-dash .frame-basis {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-faint);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 0 4px; margin-left: 4px;
+  cursor: help;
+}
+.wx-dash .frame-label.is-stale { color: var(--warn); font-weight: 600; }
+.wx-dash .obs-note .muted { color: var(--text-faint); }
+
 /* ---- Air quality ---- */
 .wx-dash .aqi-big { display: flex; align-items: center; gap: 16px; }
 .wx-dash .aqi-dot { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; color: #05121b; }
@@ -694,6 +746,14 @@ body.wx-standalone #root { min-height: 100vh; }
   .wx-dash .alerts-banner { margin-left: 12px; margin-right: 12px; }
   .wx-dash .map { height: 320px; }
   .wx-dash .road-frame { height: 380px; }
+  /* At this width the timeline can't hold controls and a legible frame stamp on
+     one line — wrap the stamp under the transport rather than squeezing it. */
+  .wx-dash .timeline { flex-wrap: wrap; }
+  .wx-dash .timeline input[type=range] { flex: 1 1 140px; }
+  .wx-dash .frame-label { min-width: 0; flex: 1 0 100%; }
+  /* The scale is the first thing to go when the map needs the room; it stays
+     reachable behind the toggle. */
+  .wx-dash .radar-legend-label { font-size: 9px; }
 }
 
 /* ---- Quality floor ------------------------------------------------------- */

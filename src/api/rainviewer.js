@@ -15,24 +15,3 @@ export async function getRainviewerIndex(signal) {
   if (!res.ok) throw new Error(`RainViewer ${res.status}`);
   return res.json();
 }
-
-// --- superseded by getRainviewerIndex + lib/radar.js -------------------------
-// Still consumed by the outgoing Radar.jsx panel, which the next commit removes.
-// Kept here so this commit stands on its own: the refactor is additive, and the
-// old surface disappears together with its last caller rather than before it.
-
-export async function getRadarFrames() {
-  const json = await getRainviewerIndex();
-  const host = json.host;
-  const past = json.radar?.past || [];
-  const nowcast = json.radar?.nowcast || [];
-  const frames = [
-    ...past.map((f) => ({ ...f, kind: 'past' })),
-    ...nowcast.map((f) => ({ ...f, kind: 'nowcast' })),
-  ];
-  return { host, frames };
-}
-
-export function tileUrl(host, frame, { size = 256, color = 6, options = '1_1' } = {}) {
-  return `${host}${frame.path}/${size}/{z}/{x}/{y}/${color}/${options}.png`;
-}

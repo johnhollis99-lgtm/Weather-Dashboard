@@ -25,8 +25,7 @@ import Analysis from './components/Analysis.jsx';
 import Hazards from './components/Hazards.jsx';
 import Wind from './components/Wind.jsx';
 import Snow from './components/Snow.jsx';
-import Radar from './components/Radar.jsx';
-import RadarHiRes from './components/RadarHiRes.jsx';
+import RadarPanel from './components/RadarPanel.jsx';
 import Satellite from './components/Satellite.jsx';
 import ZoomEarth from './components/ZoomEarth.jsx';
 import { WindyRadar, WindyWind, WindyWaves } from './components/WindyMaps.jsx';
@@ -268,11 +267,11 @@ export default function App() {
           note="Live remote-sensing and model graphics. Heavy to load — collapse this to keep the top of the page fast."
           collapsible
         >
-          <div className="col-6">
-            <Radar location={location} refreshKey={tick} />
-          </div>
-          <div className="col-6">
-            <RadarHiRes location={location} refreshKey={tick} />
+          {/* One interactive radar, full width — it replaced a pair of half-width
+              panels (IEM without animation, RainViewer with it) that each mounted
+              their own Leaflet map. Source selection lives inside it. */}
+          <div className="col-12">
+            <RadarPanel location={location} refreshKey={tick} />
           </div>
           <div className="col-6">
             <Satellite location={location} refreshKey={tick} />
