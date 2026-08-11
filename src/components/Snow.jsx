@@ -19,6 +19,11 @@ export default function Snow({ gfs, grid, location }) {
     const depthM = h.snow_depth?.[i] ?? null;
     const fzM = h.freezing_level_height?.[i] ?? null;
 
+    // Is anything actually falling in this window? Gates the snow-level context
+    // below — a rain/snow line is meaningless without precipitation.
+    const precip18mm = (h.precipitation || []).slice(i, i18).reduce((a, b) => a + (b || 0), 0);
+    const precipExpected = precip18mm >= 0.2 || snow18cm >= 0.1;
+
     // Daily snowfall totals (cm) from the model.
     const daily = {};
     for (let k = 0; k < h.time.length; k++) {
@@ -64,13 +69,28 @@ export default function Snow({ gfs, grid, location }) {
         {isTahoeArea(location.lat, location.lon) && snowLevelFt != null && (
           <>
             <div className="diag-section-title">Tahoe snow-level context</div>
-            <div className="snow-context">
-              <SnowRow name={`Lake level (${TAHOE_LAKE_FT.toLocaleString()} ft)`} ft={TAHOE_LAKE_FT} snowLevelFt={snowLevelFt} />
-              {TAHOE_PASSES.map((p) => (
-                <SnowRow key={p.name} name={`${p.name} (${p.ft.toLocaleString()} ft)`} ft={p.ft} snowLevelFt={snowLevelFt} />
-              ))}
-            </div>
-            <div className="obs-note">Snow level ≈ {Math.round(snowLevelFt).toLocaleString()} ft: locations at/above it see snow; below it, rain.</div>
+            {/* GATE: the pass-by-pass snow/rain table describes what precipitation
+                WOULD do. Showing "🌧 rain" beside every pass on a dry day reads as
+                a forecast of rain. When nothing is falling, state the level as
+                the hypothetical it is and drop the per-pass verdicts. */}
+            {precipExpected ? (
+              <>
+                <div className="snow-context">
+                  <SnowRow name={`Lake level (${TAHOE_LAKE_FT.toLocaleString()} ft)`} ft={TAHOE_LAKE_FT} snowLevelFt={snowLevelFt} />
+                  {TAHOE_PASSES.map((p) => (
+                    <SnowRow key={p.name} name={`${p.name} (${p.ft.toLocaleString()} ft)`} ft={p.ft} snowLevelFt={snowLevelFt} />
+                  ))}
+                </div>
+                <div className="obs-note">
+                  Snow level ≈ {Math.round(snowLevelFt).toLocaleString()} ft: locations at/above it see snow; below it, rain.
+                </div>
+              </>
+            ) : (
+              <div className="obs-note">
+                Snow level would sit near {Math.round(snowLevelFt).toLocaleString()} ft, but no precipitation is modeled in
+                this window — no rain/snow line applies right now.
+              </div>
+            )}
           </>
         )}
       </>

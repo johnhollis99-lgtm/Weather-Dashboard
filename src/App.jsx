@@ -104,8 +104,8 @@ export default function App() {
   const hourly = useAsync(() => getHourly(pd.forecastHourly), [pd?.forecastHourly, tick], !!pd?.forecastHourly);
   const grid = useAsync(() => getGridData(pd.forecastGridData), [pd?.forecastGridData, tick], !!pd?.forecastGridData);
   const obs = useAsync(
-    () => getLatestObservation(pd.observationStations),
-    [pd?.observationStations, tick],
+    () => getLatestObservation(pd.observationStations, lat, lon),
+    [pd?.observationStations, lat, lon, tick],
     !!pd?.observationStations,
   );
   const alerts = useAsync(() => getActiveAlerts(lat, lon), [lat, lon, tick]);
@@ -207,7 +207,7 @@ export default function App() {
             <Summary briefing={brief} loading={diagLoading} error={diagError} />
           </div>
           <div className="col-6">
-            <Analysis diag={diag} loading={diagLoading} error={diagError} />
+            <Analysis diag={diag} sum={sum18} location={location} loading={diagLoading} error={diagError} />
           </div>
           <div className="col-6">
             <Hazards alerts={alerts} sum={sum18} hazards={hazards} />

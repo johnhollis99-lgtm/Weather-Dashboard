@@ -710,3 +710,8 @@ body.wx-standalone #root { min-height: 100vh; }
     scroll-behavior: auto !important;
   }
 }
+
+/* Per-field sourcing marks for a composited observation (CurrentConditions). */
+.wx-dash .cc-src { color: var(--accent); font-size: 11px; cursor: help; }
+.wx-dash .cc-composite { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 10px; }
+

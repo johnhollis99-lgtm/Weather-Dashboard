@@ -1,15 +1,25 @@
-// Rule-based meteorological analysis engine.
+// Rule-based meteorological analysis engine — STAGE 2 of the interpretation
+// pipeline (stage 1 is `ingredients.js`).
 //
 // Takes the computed diagnostics object and interprets the RAW NUMBERS into a
 // plain-language assessment. This is an independent interpretation — not a
 // restatement of the NWS zone forecast. Each rule emits a "finding" with a
-// severity level; a synthesis paragraph ties them together (what's happening,
-// what's next, why).
+// severity level; a synthesis paragraph ties them together.
+//
+// THE RULE THIS FILE MUST OBEY: no parameter may be narrated in a direction
+// that contradicts a conclusion already drawn from the other parameters.
+// Every sentence about precipitation, snow, fire or smoke is therefore gated on
+// the ingredient conjunctions computed in `ingredients.js` — never on its own
+// parameter alone. A high PWAT does not license "heavy rainfall" unless lift is
+// also present; a Haines of 6 does not license fire language while wetting rain
+// is falling. Adding a new sentence here means adding its gate.
 //
 // Display strings are imperial (°F, ft, in); the threshold logic stays in SI.
 // (CAPE/CIN remain J/kg and lapse rates °C/km — no standard imperial form.)
 
 import { deltaCToF, feet, mmToIn } from './units.js';
+import { assessIngredients } from './ingredients.js';
+import { atLeast, WETTING_RAIN_MM } from './thresholds.js';
 
 const LEVELS = { good: 'good', info: 'info', watch: 'watch', warn: 'warn' };
 
@@ -57,11 +67,22 @@ function instability(cape, li) {
   return f('Instability', level, 'Instability (CAPE / LI)', desc);
 }
 
-function cap(cin, cape) {
+function cap(cin, cape, ing) {
   if (cin == null) return null;
   const mag = Math.abs(cin); // treat as cap strength
   let level = LEVELS.info;
   let desc;
+  // GATE: a cap is only meaningful if there is buoyancy for it to hold down.
+  // "Parcels can rise freely" in a stable airmass invites the reader to expect
+  // convection the regime has already ruled out.
+  if (!ing.instability.convectiveAllowed) {
+    return f(
+      'Cap',
+      LEVELS.good,
+      'Convective inhibition (cap)',
+      `CIN ~${Math.round(mag)} J/kg — moot here: there is no meaningful buoyancy for a cap to hold down.`,
+    );
+  }
   if (mag < 10) {
     desc = `CIN ~${Math.round(mag)} J/kg — no meaningful cap; parcels can rise freely if lift is present.`;
     level = cape && cape > 500 ? LEVELS.watch : LEVELS.info;
@@ -78,18 +99,26 @@ function cap(cin, cape) {
   return f('Cap', level, 'Convective inhibition (cap)', desc);
 }
 
-function lapseRates(mid, low) {
+function lapseRates(mid, low, ing) {
   if (mid == null && low == null) return null;
   const parts = [];
   let level = LEVELS.info;
+  // GATE: steep lapse rates describe a POTENTIAL that only matters with
+  // buoyancy present. Without it, report the number and withhold the
+  // updraft-supporting conclusion (and the elevated severity level with it).
+  const convective = ing.instability.convectiveAllowed;
   if (mid != null) {
     let t;
     if (mid >= 8) {
-      t = `700–500 mb lapse rate ${mid.toFixed(1)} °C/km — steep, approaching dry-adiabatic; strongly supports vertical acceleration of updrafts.`;
-      level = LEVELS.warn;
+      t = convective
+        ? `700–500 mb lapse rate ${mid.toFixed(1)} °C/km — steep, approaching dry-adiabatic; strongly supports vertical acceleration of updrafts.`
+        : `700–500 mb lapse rate ${mid.toFixed(1)} °C/km — steep, approaching dry-adiabatic, but with no buoyancy available it stays potential only.`;
+      level = convective ? LEVELS.warn : LEVELS.info;
     } else if (mid >= 7) {
-      t = `700–500 mb lapse rate ${mid.toFixed(1)} °C/km — moderately steep; conditionally unstable mid-levels.`;
-      level = LEVELS.watch;
+      t = convective
+        ? `700–500 mb lapse rate ${mid.toFixed(1)} °C/km — moderately steep; conditionally unstable mid-levels.`
+        : `700–500 mb lapse rate ${mid.toFixed(1)} °C/km — moderately steep, though nothing is available to lift through them.`;
+      level = convective ? LEVELS.watch : LEVELS.info;
     } else if (mid >= 5.5) {
       t = `700–500 mb lapse rate ${mid.toFixed(1)} °C/km — near moist-adiabatic; modest mid-level instability.`;
     } else {
@@ -107,22 +136,45 @@ function lapseRates(mid, low) {
   return f('Lapse rates', level, 'Lapse rates', parts.join(' '));
 }
 
-function moisture(pwatIn, dewpointDepression) {
+function moisture(pwatIn, dewpointDepression, ing) {
   if (pwatIn == null && dewpointDepression == null) return null;
   const parts = [];
   let level = LEVELS.info;
   if (pwatIn != null) {
-    if (pwatIn < 0.5) {
-      parts.push(`PWAT ${pwatIn.toFixed(2)} in — very dry column; rainfall would be light/inefficient.`);
-      level = LEVELS.good;
-    } else if (pwatIn < 1.0) {
-      parts.push(`PWAT ${pwatIn.toFixed(2)} in — modest moisture; showers possible but limited rain totals.`);
-    } else if (pwatIn < 1.5) {
-      parts.push(`PWAT ${pwatIn.toFixed(2)} in — moist column (notably so for the interior West); efficient rainfall possible.`);
-      level = LEVELS.watch;
-    } else {
-      parts.push(`PWAT ${pwatIn.toFixed(2)} in — very moist; heavy-rain / efficient-precip potential if storms develop.`);
-      level = LEVELS.warn;
+    const m = ing.moisture;
+    // Moisture is stated RELATIVE TO SEASON AND AIRMASS. 1.23 in is
+    // unremarkable in a July Los Angeles airmass and exceptional in a January
+    // Sierra storm; an absolute scale cannot say that, so lead with
+    // percent-of-normal.
+    const rel =
+      m.pctOfNormal != null
+        ? ` — ${m.label} for the season here (${m.pctOfNormal}% of the ${m.normalIn.toFixed(2)} in normal)`
+        : '';
+    // GATE: what the moisture MEANS depends on whether anything is lifting it.
+    // Each branch below is a conclusion licensed by the ingredient conjunction,
+    // not by PWAT alone.
+    switch (ing.precipMode) {
+      case 'convective':
+        parts.push(`PWAT ${pwatIn.toFixed(2)} in${rel}; with lift and buoyancy present, efficient — locally heavy — rainfall is possible.`);
+        level = m.anomalous ? LEVELS.warn : LEVELS.watch;
+        break;
+      case 'stratiform':
+        parts.push(`PWAT ${pwatIn.toFixed(2)} in${rel}; lift is present but buoyancy is not, so expect steady stratiform precipitation rather than downpours.`);
+        level = m.anomalous ? LEVELS.watch : LEVELS.info;
+        break;
+      case 'unused': {
+        // Capitalise the missing-ingredient clause for sentence position.
+        const missing = ing.missingIngredient;
+        parts.push(
+          `PWAT ${pwatIn.toFixed(2)} in${rel}. With ${missing}, this moisture goes unused — it will not produce precipitation.`,
+        );
+        level = LEVELS.info;
+        break;
+      }
+      default:
+        parts.push(`PWAT ${pwatIn.toFixed(2)} in${rel}; too dry for meaningful rainfall.`);
+        level = LEVELS.good;
+        break;
     }
   }
   if (dewpointDepression != null) {
@@ -137,14 +189,18 @@ function moisture(pwatIn, dewpointDepression) {
   return f('Moisture', level, 'Moisture (PWAT / dewpoint depression)', parts.join(' '));
 }
 
-function mixing(blHeight, mixingHeight) {
+function mixing(blHeight, mixingHeight, ing) {
   const h = blHeight ?? mixingHeight;
   if (h == null) return null;
   let level = LEVELS.info;
   let desc;
   if (h < 500) {
-    desc = `Boundary-layer / mixing height ~${feet(h)} ft — shallow; poor vertical mixing, pollutants and smoke stay trapped near the surface.`;
-    level = LEVELS.watch;
+    // GATE: trapped-smoke language assumes there is aerosol to trap. Wetting
+    // rain scavenges it, so the shallow layer stops being an air-quality story.
+    desc = ing.wettingRain
+      ? `Boundary-layer / mixing height ~${feet(h)} ft — shallow, though rain is washing the column out, so trapping is not the concern today.`
+      : `Boundary-layer / mixing height ~${feet(h)} ft — shallow; poor vertical mixing, pollutants and smoke stay trapped near the surface.`;
+    level = ing.wettingRain ? LEVELS.info : LEVELS.watch;
   } else if (h < 1500) {
     desc = `Boundary-layer / mixing height ~${feet(h)} ft — moderate daytime mixing.`;
   } else {
@@ -154,13 +210,17 @@ function mixing(blHeight, mixingHeight) {
   return f('Mixing', level, 'Boundary-layer mixing', desc);
 }
 
-function ventilation(rate) {
+function ventilation(rate, ing) {
   if (rate == null) return null;
   let level = LEVELS.info;
   let desc;
   if (rate < 2000) {
-    desc = `Ventilation rate ~${Math.round(rate)} m²/s — POOR; stagnant air, smoke/haze accumulates, air-quality risk.`;
-    level = LEVELS.warn;
+    // GATE: same conjunction as `mixing()` — no smoke-accumulation warning
+    // while wetting rain is falling.
+    desc = ing.wettingRain
+      ? `Ventilation rate ~${Math.round(rate)} m²/s — poor, but wetting rain is scavenging the column, so haze accumulation is not the concern.`
+      : `Ventilation rate ~${Math.round(rate)} m²/s — POOR; stagnant air, smoke/haze accumulates, air-quality risk.`;
+    level = ing.wettingRain ? LEVELS.info : LEVELS.warn;
   } else if (rate < 4000) {
     desc = `Ventilation rate ~${Math.round(rate)} m²/s — marginal/fair dispersion.`;
     level = LEVELS.watch;
@@ -174,30 +234,51 @@ function ventilation(rate) {
   return f('Ventilation', level, 'Ventilation / smoke potential', desc);
 }
 
-function fireWeather(haines, dewpointDepression, ventilationRate) {
+function fireWeather(haines, dewpointDepression, ventilationRate, ing) {
   if (haines == null) return null;
   let level = LEVELS.info;
   let desc;
   const h = Math.round(haines);
+
+  // GATE: Haines describes the atmosphere's contribution to fire growth, but a
+  // high value means nothing to a wet landscape. Wetting rain suppresses the
+  // whole story; a moist airmass downgrades it. Only a dry airmass earns the
+  // elevated language and severity.
+  if (ing.wettingRain) {
+    return f(
+      'Fire weather',
+      LEVELS.good,
+      'Fire weather (Haines)',
+      `Haines index ${h}, but wetting rain is expected — fire-growth potential is suppressed regardless of the index.`,
+    );
+  }
+
   if (h <= 3) {
     desc = `Haines index ${h} — LOW potential for large fire growth.`;
     level = LEVELS.good;
   } else if (h === 4) {
-    desc = `Haines index ${h} — MODERATE fire-growth potential (dry, unstable lower atmosphere).`;
-    level = LEVELS.watch;
+    desc = ing.dryAirmass
+      ? `Haines index ${h} — MODERATE fire-growth potential (dry, unstable lower atmosphere).`
+      : `Haines index ${h} — moderate on the index, but the airmass is not dry, which limits its practical significance.`;
+    level = ing.dryAirmass ? LEVELS.watch : LEVELS.info;
   } else {
-    desc = `Haines index ${h} — HIGH potential for plume-dominated / erratic large-fire growth.`;
-    level = LEVELS.warn;
+    desc = ing.dryAirmass
+      ? `Haines index ${h} — HIGH potential for plume-dominated / erratic large-fire growth.`
+      : `Haines index ${h} — high on the index, but without a dry airmass the practical fire-growth risk is lower than the number suggests.`;
+    level = ing.dryAirmass ? LEVELS.warn : LEVELS.watch;
   }
   if (dewpointDepression != null && dewpointDepression >= 15) {
     desc += ` Combined with dry low levels (DD ${deltaCToF(dewpointDepression).toFixed(0)} °F), expect rapid fuel drying.`;
+  }
+  if (ing.breezy) {
+    desc += ` Winds to ~${Math.round(ing.maxWindMph)} mph add a spread component.`;
   }
   return f('Fire weather', level, 'Fire weather (Haines)', desc);
 }
 
 // ---- Synthesis ------------------------------------------------------------
 
-function synthesize(diag) {
+function synthesize(diag, ing) {
   const g = diag.gfs || {};
   const d = diag.derived || {};
   const cape = g.cape;
@@ -234,23 +315,60 @@ function synthesize(diag) {
     trigger = '';
   }
 
-  // Steepness + moisture flavor.
+  // Steepness.
+  // GATE: steep lapse rates only matter if there is buoyancy for them to act
+  // on. Praising updraft acceleration in a stable airmass narrates a parameter
+  // against a conclusion the regime sentence has already drawn.
   let flavor = '';
-  if (mid != null && mid >= 7.5) {
+  if (mid != null && mid >= 7.5 && ing.instability.convectiveAllowed) {
     flavor += ` Steep mid-level lapse rates (${mid.toFixed(1)} °C/km) would let updrafts accelerate efficiently.`;
   }
-  if (pwatIn != null) {
-    if (pwatIn >= 1.2) {
-      flavor += ` The column is moist (PWAT ${pwatIn.toFixed(2)} in), favoring efficient — locally heavy — rainfall.`;
-    } else if (pwatIn < 0.6) {
-      flavor += ` The column is dry (PWAT ${pwatIn.toFixed(2)} in), so storms would tend to be high-based with gusty winds and little rain.`;
-    }
+
+  // Moisture → precipitation. This is the conjunction, not a one-way template.
+  // Moisture alone never licenses rainfall language; it must be joined by lift,
+  // and only instability upgrades it to convective/heavy.
+  const m = ing.moisture;
+  const pw = pwatIn != null ? `PWAT ${pwatIn.toFixed(2)} in` : 'the column';
+  const vsNormal = m.pctOfNormal != null ? `, ${m.pctOfNormal}% of the seasonal normal for this region` : '';
+  switch (ing.precipMode) {
+    case 'convective':
+      flavor += ` The column is moist (${pw}${vsNormal}) and lift is present with buoyancy available — efficient, locally heavy rainfall is possible where storms develop.`;
+      break;
+    case 'stratiform':
+      flavor += ` The column is moist (${pw}${vsNormal}) with lift present but little buoyancy — expect steady, stratiform precipitation rather than convective downpours.`;
+      break;
+    case 'unused':
+      // The forecaster's sentence. Never praise moisture that has nothing
+      // acting on it — and name only the ingredient that is actually absent.
+      //
+      // "Moisture is present aloft" would itself overstate a below-normal
+      // column: saying it alongside "67% of the seasonal normal" is the same
+      // self-contradiction in miniature. Only a near- or above-normal column
+      // earns that phrasing.
+      flavor += atLeast(m.tier, 'moderate')
+        ? ` Moisture is present aloft (${pw}${vsNormal}), but with ${ing.missingIngredient} it goes unused — no precipitation expected.`
+        : ` The column is on the dry side (${pw}${vsNormal}), and with ${ing.missingIngredient} there is nothing to act on it anyway — no precipitation expected.`;
+      break;
+    case 'none':
+      if (pwatIn != null) {
+        flavor += ` The column is dry (${pw}${vsNormal})`;
+        // GATE: "storms would be high-based" presupposes storms. Only say it
+        // where there is buoyancy to make one.
+        flavor += ing.instability.convectiveAllowed
+          ? ', so any storms would be high-based with gusty winds and little rain.'
+          : '.';
+      }
+      break;
+    default:
+      break; // moisture unknown → say nothing rather than guess
   }
 
   // Air quality / ventilation tail.
+  // GATE: smoke-accumulation language is irrelevant while wetting rain is
+  // falling — rain scavenges the aerosol the sentence is about.
   let air = '';
   if (vent != null) {
-    if (vent < 2000) {
+    if (vent < 2000 && !ing.wettingRain) {
       air = ` Dispersion is poor (ventilation ~${Math.round(vent)} m²/s): any smoke or pollutants will tend to accumulate near the surface.`;
     } else if (vent >= 6000) {
       air = ` Dispersion is excellent (ventilation ~${Math.round(vent)} m²/s): the boundary layer is flushing efficiently.`;
@@ -360,9 +478,14 @@ export function assessHazards(diag, sum) {
       else if (snowIn >= 0.1) { level = 'Low'; pct = 25; }
       else { level = 'None'; pct = 3; }
     }
+    // GATE: a snow level is only meaningful if something is falling through
+    // it. Quoting one on a dry day invites the reader to picture a rain/snow
+    // line that does not exist.
+    const anyPrecip = (precip != null && precip >= 0.2) || (snowIn != null && snowIn >= 0.1);
     const reason =
       `${snowIn != null ? `~${snowIn.toFixed(1)}″ snow modeled (next 18h)` : 'snow data unavailable'}` +
-      `${snowLevelFt != null ? `; snow level ~${Math.round(snowLevelFt).toLocaleString()} ft` : ''}.`;
+      `${snowLevelFt != null && anyPrecip ? `; snow level ~${Math.round(snowLevelFt).toLocaleString()} ft` : ''}` +
+      `${!anyPrecip ? '; no precipitation expected, so no rain/snow line applies' : ''}.`;
     out.push({ hazard: 'Snow', level, pct, reason });
   }
 
@@ -390,10 +513,11 @@ export function assessHazards(diag, sum) {
 // ---------------------------------------------------------------------------
 // Top-of-dashboard briefing — plain-language synthesis of everything.
 // ---------------------------------------------------------------------------
-export function briefing({ diag, hazards, sum, confidence, obs, location, alerts }) {
+export function briefing({ diag, hazards, sum, confidence, obs, location, alerts, date }) {
   if (!diag) return null;
   const s = sum || {};
   const parts = {};
+  const ing = assessIngredients({ diag, sum, location, date });
 
   // Setup line: observed temp + the meteorological regime.
   const tF = obs?.temperatureC != null ? Math.round((obs.temperatureC * 9) / 5 + 32) : null;
@@ -401,7 +525,7 @@ export function briefing({ diag, hazards, sum, confidence, obs, location, alerts
   parts.setup =
     `${where}: ` +
     `${tF != null ? `currently ${tF}°F${obs?.textDescription ? ', ' + obs.textDescription.toLowerCase() : ''}. ` : ''}` +
-    synthesize(diag);
+    synthesize(diag, ing);
 
   // Outlook for the next 18–24h.
   const o = [];
@@ -437,21 +561,28 @@ export function briefing({ diag, hazards, sum, confidence, obs, location, alerts
   return parts;
 }
 
-export function analyze(diag) {
+// `sum` (summarize18h) and `location` supply the LIFT and SEASONAL-MOISTURE
+// ingredients. They are optional so existing call sites keep working, but when
+// they are absent lift is "unknown", which the gates treat as "not present" —
+// the narrative then declines to make precipitation claims rather than
+// inventing them.
+export function analyze(diag, sum, location, date) {
   if (!diag) return { findings: [], synthesis: 'No diagnostics available yet.' };
   const g = diag.gfs || {};
   const d = diag.derived || {};
   const nws = diag.nws || {};
 
+  const ing = assessIngredients({ diag, sum, location, date });
+
   const findings = [
     instability(g.cape, g.liftedIndex),
-    cap(g.cin, g.cape),
-    lapseRates(d.lapse700_500, d.lapse850_700),
-    moisture(d.pwatIn, d.dewpointDepression),
-    mixing(g.blHeight, nws.mixingHeight?.value),
-    ventilation(d.ventilationRate),
-    fireWeather(nws.hainesIndex?.value, d.dewpointDepression, d.ventilationRate),
+    cap(g.cin, g.cape, ing),
+    lapseRates(d.lapse700_500, d.lapse850_700, ing),
+    moisture(d.pwatIn, d.dewpointDepression, ing),
+    mixing(g.blHeight, nws.mixingHeight?.value, ing),
+    ventilation(d.ventilationRate, ing),
+    fireWeather(nws.hainesIndex?.value, d.dewpointDepression, d.ventilationRate, ing),
   ].filter(Boolean);
 
-  return { findings, synthesis: synthesize(diag) };
+  return { findings, synthesis: synthesize(diag, ing), ingredients: ing };
 }

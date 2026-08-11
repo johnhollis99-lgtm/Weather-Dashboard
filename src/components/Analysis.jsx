@@ -2,8 +2,13 @@ import Panel from './Panel.jsx';
 import { analyze } from '../lib/analysis.js';
 
 // Meteorological analysis — interprets the diagnostics into plain language.
-export default function Analysis({ diag, loading, error }) {
-  const result = diag ? analyze(diag) : null;
+//
+// `sum` (18-hour summary) and `location` are not optional in spirit: they carry
+// the LIFT and SEASONAL-MOISTURE ingredients that gate every precipitation
+// sentence. Without them the engine falls back to "lift unknown" and withholds
+// rainfall claims rather than guessing.
+export default function Analysis({ diag, sum, location, loading, error }) {
+  const result = diag ? analyze(diag, sum, location) : null;
 
   return (
     <Panel title="Meteorological Analysis" sub="rule-based interpretation of the raw numbers">
