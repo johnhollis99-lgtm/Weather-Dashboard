@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import Panel from './Panel.jsx';
 import { nearestRadar } from '../lib/locations.js';
@@ -17,6 +17,13 @@ export default function RadarHiRes({ location, refreshKey }) {
   const siteRef = useRef(null);
   const site = nearestRadar(location.lat, location.lon);
 
+  // Leaflet tile layers fail silently: if IEM is down you get a bare dark
+  // basemap with no reflectivity and no indication anything is wrong. Track the
+  // layer's own load/error events so the panel can say which it is.
+  // 'loading' → 'ok' (tiles painted) | 'error' (tile requests failing)
+  const [tiles, setTiles] = useState('loading');
+  const tileErrors = useRef(0);
+
   useEffect(() => {
     const map = L.map(mapEl.current, { zoomControl: true }).setView([location.lat, location.lon], 7);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -27,7 +34,22 @@ export default function RadarHiRes({ location, refreshKey }) {
       opacity: 0.8,
       zIndex: 500,
       attribution: 'NEXRAD N0Q © Iowa State Mesonet (IEM)',
-    }).addTo(map);
+    })
+      // A few 404s are normal — IEM has no tile where there's no coverage. Only
+      // call it an outage when a whole batch fails with nothing painting.
+      .on('loading', () => {
+        tileErrors.current = 0;
+        setTiles((s) => (s === 'ok' ? 'ok' : 'loading'));
+      })
+      .on('tileerror', () => {
+        tileErrors.current += 1;
+        if (tileErrors.current >= 8) setTiles('error');
+      })
+      .on('tileload', () => {
+        tileErrors.current = 0;
+        setTiles('ok');
+      })
+      .addTo(map);
     markerRef.current = L.circleMarker([location.lat, location.lon], {
       radius: 6, color: '#4fc3f7', weight: 2, fillColor: '#4fc3f7', fillOpacity: 0.6,
     }).addTo(map);
@@ -58,6 +80,18 @@ export default function RadarHiRes({ location, refreshKey }) {
 
   return (
     <Panel title="High-Res Radar (NEXRAD N0Q)" sub={`nearest: WSR-88D ${site.id} · ${site.name}`}>
+      {tiles === 'error' && (
+        <div className="state error">
+          ⚠ Reflectivity tiles aren’t loading from the Iowa State Mesonet (IEM). The base map below is
+          real, but it is showing <strong>no radar data</strong>. Try ↻ Refresh; if it persists, IEM’s
+          tile cache is likely down.
+        </div>
+      )}
+      {tiles === 'loading' && (
+        <div className="state">
+          <span className="spinner" /> Loading reflectivity tiles…
+        </div>
+      )}
       <div ref={mapEl} className="map" />
       <div className="obs-note" style={{ marginTop: 8 }}>
         Base reflectivity composite via Iowa State Mesonet · interactive pan/zoom · ◯ amber = nearest radar site.

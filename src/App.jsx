@@ -34,7 +34,6 @@ import ModelMaps from './components/ModelMaps.jsx';
 import AirQuality from './components/AirQuality.jsx';
 import Confidence from './components/Confidence.jsx';
 import Roads from './components/Roads.jsx';
-import UpperAir from './components/UpperAir.jsx';
 import DiagnosticSoundingPanel from './components/DiagnosticSoundingPanel.jsx';
 import ExtendedForecast from './components/ExtendedForecast.jsx';
 
@@ -179,9 +178,6 @@ export default function App() {
         <div className="col-12">
           <DiagnosticSoundingPanel location={location} refreshKey={tick} />
         </div>
-        <div className="col-12">
-          <UpperAir location={location} refreshKey={tick} />
-        </div>
 
         {/* ── Interpretation ───────────────────────────────────────── */}
         <div className="col-6">
@@ -252,13 +248,14 @@ export default function App() {
       <footer className="footer">
         <div>
           <strong>Sources:</strong> NWS / api.weather.gov · Open-Meteo (GFS, Air Quality, Ensemble, Geocoding) ·
-          RainViewer · Iowa State Mesonet (NEXRAD N0Q) · NOAA/NESDIS/STAR GOES-18 · Zoom Earth (satellite &amp; storms) · Windy.com (radar/wind/waves embeds) · Tropical Tidbits (model maps) · NOAA SPC (mesoanalysis &amp;
-          outlooks) · University of Wyoming Upper-Air · Caltrans QuickMap · Nevada DOT 511.
+          RainViewer · Iowa State Mesonet (NEXRAD N0Q) · NOAA/NESDIS/STAR GOES-18 · Zoom Earth (satellite &amp; storms) ·
+          Windy.com (radar/wind/waves embeds) · Tropical Tidbits (model maps) · NOAA SPC (convective &amp; fire-weather
+          outlooks) · Caltrans QuickMap · Nevada DOT 511.
         </div>
         <div>
-          SPC, UWyo soundings, and NDOT 511 are routed through the bundled local Express proxy so they render inline.
-          Probabilities are labeled official vs. derived; the “derived” hazard assessment is Claude's interpretation, not
-          an official forecast.
+          SPC outlooks, model maps, and NDOT 511 are routed through the bundled local Express proxy so they render
+          inline. Probabilities are labeled official vs. derived; the “derived” hazard assessment is Claude's
+          interpretation, not an official forecast.
         </div>
         <div className="disclaimer">
           ⚠ For situational awareness and educational use only. NOT for operational, aviation, marine, or life-safety

@@ -1,8 +1,44 @@
-// Active NWS alerts banner — only renders when alerts are present.
-
+// Active NWS alerts.
+//
+// "No alerts" and "the alerts fetch failed" used to render identically (both
+// `return null`), which is the most dangerous silent failure on the dashboard:
+// an absent banner reads as "nothing is wrong" when it may mean "we don't
+// know". Failure is now stated explicitly; the all-clear is stated quietly.
 export default function AlertsBanner({ alerts }) {
-  const data = alerts?.data;
-  if (!data || data.length === 0) return null;
+  const { data, loading, error } = alerts || {};
+
+  if (error && !data) {
+    return (
+      <div className="alerts-banner alerts-banner-error">
+        <div className="alert-item">
+          <span className="alert-event">⚠ Alert feed unavailable</span>
+          <span className="alert-sev">
+            Could not reach api.weather.gov — this is <strong>not</strong> an all-clear. Check NWS directly.
+          </span>
+          <div className="alert-desc">{String(error)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !data) {
+    return (
+      <div className="alerts-banner alerts-banner-quiet">
+        <div className="state">
+          <span className="spinner" /> Checking for active NWS alerts…
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="alerts-banner alerts-banner-quiet">
+        <span className="alerts-clear">✓ No active NWS alerts for this location</span>
+      </div>
+    );
+  }
+
   return (
     <div className="alerts-banner">
       {data.map((a) => (

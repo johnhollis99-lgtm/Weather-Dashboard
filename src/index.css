@@ -535,3 +535,37 @@ button.active { background: var(--accent); color: #05121b; border-color: var(--a
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .link-cta:hover { background: var(--surface-3, rgba(255, 255, 255, 0.08)); border-color: var(--accent, #38bdf8); }
+
+/* ---- Phase 2: honest per-panel states ------------------------------------
+   Every panel must distinguish loading / empty / error. These cover the cases
+   that previously rendered as an unexplained blank box. */
+
+/* Quiet variant of the alerts banner: the all-clear and the "still checking"
+   state must not borrow the warning palette, or a calm day looks like a
+   hazard. The error variant keeps the warning treatment on purpose. */
+.alerts-banner-quiet {
+  border-color: var(--border);
+  background: var(--bg-panel-2, rgba(255, 255, 255, 0.03));
+  padding: 8px 14px;
+}
+.alerts-banner-quiet .state { padding: 0; }
+.alerts-clear { font-size: 13px; color: var(--good, #46c08a); font-weight: 600; }
+
+/* Embedded third-party iframes (Windy, Caltrans, NDOT). */
+.embed-wrap { position: relative; }
+.embed-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  background: #05080b;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  pointer-events: none;
+}
+.embed-fallback { display: flex; flex-direction: column; gap: 10px; }
+.embed-fallback .link-row { margin-bottom: 4px; }

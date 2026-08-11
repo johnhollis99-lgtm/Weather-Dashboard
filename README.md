@@ -2,9 +2,9 @@
 
 A standalone weather/meteorology dashboard for the western U.S. (default: **Lake
 Tahoe**). It pulls live data straight from NWS, Open-Meteo, RainViewer and the
-GOES-18 CDN in the browser, and routes the two sources that block hotlinking
-(**SPC mesoanalysis** and **University of Wyoming soundings**) through a tiny
-bundled Express proxy so they render as **real inline images**.
+GOES-18 CDN in the browser, and routes the sources that block hotlinking
+(**SPC outlooks** and **Tropical Tidbits model maps**) through a tiny bundled
+Express proxy so they render as **real inline images**.
 
 > This fixes the "every panel is empty" problem from running inside a sandbox:
 > running standalone, the browser can reach the open APIs directly, and the local
@@ -28,7 +28,7 @@ Then open:
 | Process | Port | What it does |
 | ------- | ---- | ------------ |
 | `web` (Vite + React) | **5173** | the dashboard UI you open in the browser |
-| `proxy` (Express)    | **3001** | inline-image proxy for SPC + UWyo |
+| `proxy` (Express)    | **3001** | inline-image proxy for SPC outlooks + model maps |
 
 Vite forwards `/api/*` to the proxy automatically, so you only ever open
 `http://localhost:5173`. If port 5173 is busy, Vite picks the next free port —
@@ -122,7 +122,6 @@ fresh** (never serves stale obs/radar). Regenerate icons with
 | Air quality | Open-Meteo air-quality | US AQI, PM2.5/PM10/ozone, color category, 24h trend |
 | Forecast confidence | Open-Meteo **ensemble** (gfs_seamless) | daily precip member spread = confidence |
 | **Road conditions** | Caltrans QuickMap + NDOT 511 | embedded official maps; Caltrans default (CA), NDOT toggle (NV, via header-stripping proxy); CA/NV only |
-| Upper-air & severe | **proxied** UWyo skew-T + SPC mesoanalysis | inline images; SPC parameter picker |
 | Extended forecast | NWS multi-day periods | with icons |
 
 **Derived values computed in-app:** 850–700 & 700–500 mb lapse rates (°C/km),
@@ -147,23 +146,24 @@ exactly what failed and why.
 ```
 browser  ──►  NWS / Open-Meteo / RainViewer / GOES CDN      (CORS-friendly, direct)
    │
-   └──►  Vite dev server (5173)  ──/api/*──►  Express proxy (3001)  ──►  SPC, UWyo
-                                                (pipes images back inline)
+   └──►  Vite dev server (5173)  ──/api/*──►  Express proxy (3001)  ──►  SPC outlooks,
+                                                (pipes images back inline)      Tropical Tidbits
 ```
 
 - Direct-from-browser: `src/api/*.js`
 - Proxy + inline-image logic: `server/index.js`
 - Diagnostics math: `src/lib/diagnostics.js` · Analysis engine: `src/lib/analysis.js`
-- Per-location source selection (GOES sector, sounding station, SPC sector): `src/lib/locations.js`
+- Per-location source selection (GOES sector, nearest WSR-88D, road state): `src/lib/locations.js`
 
 ### Notes on upstream quirks handled here
 - Open-Meteo GFS uses `total_column_integrated_water_vapour` for PWAT (the older
   `precipitable_water` name is rejected by the GFS endpoint).
-- UWyo's `GIF:SKEWT` endpoint returns an HTML wrapper now; the proxy fetches the
-  real GIF at `/upperair/images/{YYYYMMDDHH}.{STNM}.skewt.parc.gif` and falls back
-  through earlier 00Z/12Z cycles until it finds one that exists.
-- SPC mesoanalysis images live at `/exper/mesoanalysis/s{N}/{parm}/{parm}.gif`;
-  SPC outlooks are now `.png` (`day1otlk.png`, `fire_wx/day1otlk_fire.png`, …).
+- **University of Wyoming upper-air is gone.** Every `/upperair/images/*.skewt.parc.gif`
+  URL now 404s, so the proxied UWyo skew-T — and the SPC mesoanalysis picker beside it —
+  were removed. The sounding is now `DiagnosticSoundingPanel`: an SVG Skew-T drawn from
+  Open-Meteo GFS pressure levels, which never used the proxy.
+- SPC outlooks are `.png` (`day1otlk.png`, `fire_wx/day1otlk_fire.png`, …) and are still
+  proxied inline for the Hazards panel.
 - GOES `wus` sector publishes 1000×1000 images while `psw`/`pnw` publish 1200×1200.
 - High-res radar uses the IEM NEXRAD **N0Q** tile cache (keyless, `Access-Control-Allow-Origin: *`).
 - Model maps: NOAA **MAG** is now fully access-blocked (HTTP 403) to non-browser clients, so model graphics come from **Tropical Tidbits** (`mslp_pcpn`, `ref_frzn`, `mslp_wind`, `apcpn`). TT hotlink-protects images, so `/api/model` fetches them with a `Referer` and resolves the latest available run; `/api/model-info` reports the run + frame count. Inputs are whitelisted (model/field/region/frame) — not an open proxy. NAM has no `wus` region, so the panel offers CONUS/N. America for NAM.
@@ -182,9 +182,9 @@ browser  ──►  NWS / Open-Meteo / RainViewer / GOES CDN      (CORS-friendly
 - **A panel shows a red error box** — that's by design; it prints the failing URL
   / status. NWS occasionally rate-limits or a gridpoint omits a field ("not
   provided"); hit **↻ Refresh** or wait for the 5-min cycle.
-- **Sounding panel shows an error** — UWyo skips some cycles for some stations;
-  the proxy walks back up to ~3 days. If a station is simply down, try another
-  location. (UWyo also rate-limits aggressive reloading.)
+- **Sounding shows "SAMPLE DATA"** — the live Open-Meteo GFS pressure-level profile
+  didn't return enough levels, so the panel falls back to the capped-severe teaching
+  example and says so. Hit **↻ Refresh** or try another location.
 - **Port already in use** — Vite auto-bumps the web port; for the proxy set
   `PORT=3002` and update `vite.config.js`'s proxy target to match.
 

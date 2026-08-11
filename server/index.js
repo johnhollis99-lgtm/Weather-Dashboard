@@ -1,9 +1,9 @@
 // Express proxy server.
 //
 // Purpose: a few weather data sources block cross-origin browser requests or
-// hotlinking (notably SPC mesoanalysis and University of Wyoming soundings).
-// We fetch them server-side and pipe the bytes back so the frontend can render
-// them as REAL INLINE <img> elements instead of click-out links.
+// hotlinking (notably SPC outlooks and Tropical Tidbits model maps). We fetch
+// them server-side and pipe the bytes back so the frontend can render them as
+// REAL INLINE <img> elements instead of click-out links.
 //
 // CORS-friendly sources (NWS, Open-Meteo, RainViewer, GOES CDN) are fetched
 // directly from the browser and never touch this server.
@@ -56,56 +56,6 @@ async function pipeImage(res, url, label, extraHeaders = {}) {
   res.send(buf);
 }
 
-// Candidate synoptic radiosonde times, most-recent first, stepping back 12h.
-// Backed off ~3h so the data has had time to post.
-function synopticCandidates(now = new Date(), count = 6) {
-  let t = new Date(now.getTime() - 3 * 3600 * 1000);
-  const baseHour = t.getUTCHours() >= 12 ? 12 : 0;
-  t = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), baseHour));
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    const d = new Date(t.getTime() - i * 12 * 3600 * 1000);
-    const yyyy = d.getUTCFullYear();
-    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(d.getUTCDate()).padStart(2, '0');
-    const hh = String(d.getUTCHours()).padStart(2, '0');
-    out.push({ yyyy, mm, dd, hh, label: `${yyyy}-${mm}-${dd} ${hh}Z` });
-  }
-  return out;
-}
-
-// UWyo serves the actual skew-T GIF at a direct, predictable path. (The cgi-bin
-// "GIF:SKEWT" endpoint now returns an HTML wrapper pointing at this URL.)
-function soundingImageUrl(stnm, c) {
-  return `https://weather.uwyo.edu/upperair/images/${c.yyyy}${c.mm}${c.dd}${c.hh}.${stnm}.skewt.parc.gif`;
-}
-
-// Resolve the most recent AVAILABLE sounding for a station, with a small cache
-// so /api/sounding and /api/sounding-info don't both re-download it.
-const soundingCache = new Map(); // stnm -> { ts, when, ct, buf }
-const SOUNDING_TTL = 10 * 60 * 1000;
-
-async function resolveSounding(stnm) {
-  const cached = soundingCache.get(stnm);
-  if (cached && Date.now() - cached.ts < SOUNDING_TTL) return cached;
-
-  for (const c of synopticCandidates()) {
-    const url = soundingImageUrl(stnm, c);
-    try {
-      const r = await fetch(url, { headers: { 'User-Agent': UA } });
-      const ct = r.headers.get('content-type') || '';
-      if (r.ok && ct.startsWith('image/')) {
-        const entry = { ts: Date.now(), when: c, ct, buf: Buffer.from(await r.arrayBuffer()) };
-        soundingCache.set(stnm, entry);
-        return entry;
-      }
-    } catch {
-      /* try the next candidate */
-    }
-  }
-  return null;
-}
-
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -114,50 +64,9 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'wx-dashboard-proxy', port: PORT });
 });
 
-// University of Wyoming skew-T sounding (GIF), most recent available 00Z/12Z.
-app.get('/api/sounding', async (req, res) => {
-  try {
-    const stnm = String(req.query.station || '72489').replace(/\D/g, '');
-    const r = await resolveSounding(stnm);
-    if (!r) {
-      return res
-        .status(502)
-        .json({ error: 'No recent sounding image available for station ' + stnm });
-    }
-    res.set('Content-Type', r.ct);
-    res.set('Cache-Control', 'public, max-age=300');
-    res.send(r.buf);
-  } catch (err) {
-    res.status(502).json({ error: 'sounding proxy failed', detail: String(err) });
-  }
-});
-
-// Report which sounding time the UI is actually showing (for the label).
-app.get('/api/sounding-info', async (req, res) => {
-  try {
-    const stnm = String(req.query.station || '72489').replace(/\D/g, '');
-    const r = await resolveSounding(stnm);
-    if (!r) return res.json({ found: false });
-    res.json({ found: true, label: r.when.label, station: stnm });
-  } catch (err) {
-    res.json({ found: false, error: String(err) });
-  }
-});
-
-// SPC mesoanalysis parameter image (GIF). ?sector=12&parm=mucp
-// Correct path:  /exper/mesoanalysis/s{N}/{parm}/{parm}.gif
-app.get('/api/spc', async (req, res) => {
-  try {
-    const sector = String(req.query.sector || '12').replace(/\D/g, '');
-    const parm = String(req.query.parm || 'mucp').replace(/[^a-z0-9]/gi, '');
-    const url = `https://www.spc.noaa.gov/exper/mesoanalysis/s${sector}/${parm}/${parm}.gif`;
-    await pipeImage(res, url, 'SPC mesoanalysis');
-  } catch (err) {
-    res.status(502).json({ error: 'spc proxy failed', detail: String(err) });
-  }
-});
-
 // SPC convective + fire-weather outlook images (now served as .png).
+// These come from SPC's /products/outlook/ tree and back the Hazards panel.
+// (Unrelated to the retired Upper-Air card, which used a different SPC tree.)
 const SPC_OUTLOOKS = {
   day1cat: 'https://www.spc.noaa.gov/products/outlook/day1otlk.png',
   day2cat: 'https://www.spc.noaa.gov/products/outlook/day2otlk.png',
@@ -344,5 +253,5 @@ if (existsSync(distDir)) {
 
 app.listen(PORT, () => {
   console.log(`[proxy] wx-dashboard listening on http://localhost:${PORT}`);
-  console.log(`[proxy] inline image routes: /api/sounding, /api/spc, /api/spc-outlook, /api/ndot, /api/zoomearth, /api/model`);
+  console.log(`[proxy] inline image routes: /api/spc-outlook, /api/ndot, /api/zoomearth, /api/model`);
 });

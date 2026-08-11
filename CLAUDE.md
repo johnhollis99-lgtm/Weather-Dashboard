@@ -23,7 +23,7 @@ fetched directly from the browser. All data sources are **keyless/public**.
 ## Architecture
 ```
 browser ──► NWS, Open-Meteo, RainViewer, GOES CDN, IEM tiles, Windy embeds   (CORS-OK / framable, direct)
-   └──► /api/* ──► Express proxy ──► SPC, UWyo, NDOT 511, Zoom Earth, Tropical Tidbits
+   └──► /api/* ──► Express proxy ──► SPC outlooks, NDOT 511, Zoom Earth, Tropical Tidbits
 ```
 - Direct browser APIs: `src/api/*.js` (nws, openMeteo, geocoding, rainviewer)
 - Proxy + inline-image/embeds: `server/index.js`
@@ -35,8 +35,6 @@ browser ──► NWS, Open-Meteo, RainViewer, GOES CDN, IEM tiles, Windy embeds
 - Panels: `src/components/*.jsx`; orchestration/state/layout: `src/App.jsx`
 
 ## Proxy routes (server/index.js)
-- `/api/sounding`, `/api/sounding-info` — UWyo skew-T (direct GIF + cycle fallback + cache)
-- `/api/spc` — SPC mesoanalysis param image
 - `/api/spc-outlook?img=day1cat|day2cat|day1fire|day2fire` — SPC outlooks
 - `/api/ndot` — NDOT 511 reverse proxy (strips X-Frame-Options, injects `<base>`)
 - `/api/zoomearth` — Zoom Earth reverse proxy (same XFO-strip + `<base>` trick; live satellite + tropical storm/hurricane tracking. View steered client-side via iframe URL hash `#view=lat,lon,zoomz`)
@@ -44,9 +42,15 @@ browser ──► NWS, Open-Meteo, RainViewer, GOES CDN, IEM tiles, Windy embeds
 
 ## Upstream gotchas (already handled — keep these in mind)
 - Open-Meteo GFS PWAT var is `total_column_integrated_water_vapour` (not `precipitable_water`).
-- UWyo `GIF:SKEWT` returns an HTML wrapper; real GIF is `/upperair/images/{YYYYMMDDHH}.{STNM}.skewt.parc.gif`; fall back through older 00Z/12Z cycles. UWyo rate-limits aggressive reloads.
-- SPC meso: `/exper/mesoanalysis/s{N}/{parm}/{parm}.gif` (no `new/`); mid-lapse param=`laps`, sig-tornado=`stpc`. SPC sector legend: 11 NW, 12 SW, 13 N.Plains, 14 C.Plains, 19 National.
-- SPC outlooks are now `.png` (`day1otlk.png`, `fire_wx/day1otlk_fire.png`).
+- **University of Wyoming upper-air is GONE.** The `/upperair/images/{YYYYMMDDHH}.{STNM}.skewt.parc.gif`
+  path 404s for every synoptic cycle (verified 2026-08-10, station 72489, six cycles back).
+  The proxied UWyo skew-T and the SPC mesoanalysis picker that sat beside it were removed
+  with the "Upper-Air & Severe Analysis" card. **Do not re-add them.** The sounding going
+  forward is `DiagnosticSoundingPanel` (SVG, drawn from Open-Meteo GFS pressure levels via
+  `src/api/soundingProfile.js`) — it never depended on the proxy.
+- SPC outlooks are now `.png` (`day1otlk.png`, `fire_wx/day1otlk_fire.png`). This route
+  (`/api/spc-outlook`, SPC's `/products/outlook/` tree) is **live and used by `Hazards`** —
+  it is unrelated to the removed mesoanalysis route.
 - GOES `wus` sector is 1000×1000; `psw`/`pnw` are 1200×1200.
 - High-res radar = IEM NEXRAD **N0Q** tile cache (keyless, CORS `*`).
 - NDOT (nvroads.com) blocks framing (X-Frame-Options) → proxied; its live data layer may still be cross-origin-blocked (base map loads, incidents may not). Caltrans QuickMap embeds directly.

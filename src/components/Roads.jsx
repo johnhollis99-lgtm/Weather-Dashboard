@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Panel from './Panel.jsx';
+import EmbedFrame from './EmbedFrame.jsx';
 import { roadState } from '../lib/locations.js';
 
 // Road conditions via official embedded maps (no parsed API):
@@ -40,19 +41,16 @@ export default function Roads({ location }) {
         </div>
       )}
 
-      <iframe
-        key={src}
-        title={src === 'caltrans' ? 'Caltrans QuickMap' : 'NDOT 511'}
+      <EmbedFrame
         src={iframeSrc}
-        className="road-frame"
-        loading="lazy"
+        title={src === 'caltrans' ? 'Caltrans QuickMap' : 'NDOT 511'}
+        externalUrl={ext}
+        note={
+          src === 'ndot'
+            ? 'NDOT blocks direct embedding, so this is served through the local proxy; its live incident layer may still be cross-origin-blocked even when the base map paints.'
+            : undefined
+        }
       />
-      {src === 'ndot' && (
-        <div className="obs-note">
-          NDOT blocks direct embedding; shown via the local proxy. If the live incident layer doesn't paint (their data
-          API may block cross-origin requests), use “Open full site ↗”.
-        </div>
-      )}
     </Panel>
   );
 }

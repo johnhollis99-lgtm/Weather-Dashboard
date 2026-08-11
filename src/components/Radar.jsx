@@ -105,9 +105,14 @@ export default function Radar({ location, refreshKey }) {
   return (
     <Panel title="Live Radar" sub="RainViewer · past + nowcast">
       {error ? (
-        <div className="state error">⚠ {error}</div>
+        <div className="state error">
+          ⚠ RainViewer frame index unavailable ({error}). The map below is real, but it is showing{' '}
+          <strong>no precipitation data</strong>.
+        </div>
       ) : loading ? (
         <div className="state"><span className="spinner" /> Loading radar frames…</div>
+      ) : frames.length === 0 ? (
+        <div className="state">No radar frames published right now.</div>
       ) : null}
       <div ref={mapEl} className="map" />
       <div className="timeline">

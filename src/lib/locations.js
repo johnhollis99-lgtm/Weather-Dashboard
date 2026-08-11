@@ -1,5 +1,5 @@
 // Location presets and per-location source selection (GOES sector, nearest
-// radiosonde station for the skew-T, SPC mesoanalysis sector).
+// WSR-88D radar site, Tahoe elevations, CA/NV road state).
 
 export const PRESETS = [
   { name: 'Lake Tahoe', lat: 39.0968, lon: -120.0324 },
@@ -19,50 +19,6 @@ export function goesSectorConfig(lat, lon) {
   if (lat >= 42 && lon <= -116) return { code: 'pnw', size: '1200x1200' };
   if (lon <= -114) return { code: 'psw', size: '1200x1200' };
   return { code: 'wus', size: '1000x1000' }; // interior west / Rockies (Denver)
-}
-
-// SPC mesoanalysis sector number (verified against SPC's own sector legend):
-//   11 Northwest · 12 Southwest · 13 N. Plains · 14 Central Plains ·
-//   15 S. Plains · 16 Northeast · 17 East Central · 18 Southeast ·
-//   19 National (CONUS) · 20 Midwest
-// Approximate geographic boxes; falls back to National for anything outside.
-export function spcSector(lat, lon) {
-  if (lat >= 42 && lon <= -110) return '11'; // Northwest (Seattle, PNW, N. Rockies)
-  if (lat < 42 && lon <= -108) return '12'; // Southwest (CA, NV, AZ, UT, S. CO)
-  if (lat >= 42 && lon > -110 && lon <= -95) return '13'; // Northern Plains
-  if (lat >= 37 && lat < 42 && lon > -108 && lon <= -92) return '14'; // Central Plains (Denver)
-  if (lat < 37 && lon > -108 && lon <= -90) return '15'; // Southern Plains
-  if (lat >= 38 && lon > -95 && lon <= -82) return '20'; // Midwest
-  if (lat >= 35 && lat < 42 && lon > -90 && lon <= -78) return '17'; // East Central
-  if (lat >= 40 && lon > -80) return '16'; // Northeast
-  if (lat < 37 && lon > -90) return '18'; // Southeast
-  return '19'; // National (CONUS) fallback
-}
-
-// Nearest upper-air (radiosonde) station for the UWyo skew-T.
-// Stored as [lat, lon, WMO id, label].
-const SOUNDING_STATIONS = [
-  [39.57, -119.8, '72489', 'Reno, NV (REV)'],
-  [37.73, -122.21, '72493', 'Oakland, CA (OAK)'],
-  [47.95, -124.55, '72797', 'Quillayute, WA (UIL)'],
-  [39.12, -108.53, '72476', 'Grand Junction, CO (GJT)'],
-  [40.77, -111.95, '72572', 'Salt Lake City, UT (SLC)'],
-  [34.0, -117.0, '72393', 'Vandenberg, CA (VBG)'],
-  [43.56, -116.21, '72681', 'Boise, ID (BOI)'],
-  [45.7, -118.85, '72786', 'Spokane region, WA (OTX)'],
-];
-
-export function nearestSounding(lat, lon) {
-  let best = SOUNDING_STATIONS[0];
-  let bestD = Infinity;
-  for (const s of SOUNDING_STATIONS) {
-    const d = (s[0] - lat) ** 2 + (s[1] - lon) ** 2;
-    if (d < bestD) {
-      bestD = d;
-      best = s;
-    }
-  }
-  return { id: best[2], label: best[3] };
 }
 
 // WSR-88D (NEXRAD) sites — [lat, lon, ICAO, name]. Western-focused + key others.

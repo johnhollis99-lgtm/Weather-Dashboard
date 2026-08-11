@@ -1,4 +1,5 @@
 import Panel from './Panel.jsx';
+import EmbedFrame from './EmbedFrame.jsx';
 
 // Windy.com embedded maps. Each map is the official keyless embed
 // (embed.windy.com/embed2.html) centered on the selected city's coordinates —
@@ -30,7 +31,7 @@ function windySrc(lat, lon, overlay) {
   return `https://embed.windy.com/embed2.html?${params.toString()}`;
 }
 
-function WindyEmbed({ location, overlay, title, sub }) {
+function WindyEmbed({ location, overlay, title, sub, note }) {
   const src = windySrc(location.lat, location.lon, overlay);
   const ext = `https://www.windy.com/?${overlay},${location.lat.toFixed(3)},${location.lon.toFixed(3)},${ZOOM}`;
 
@@ -46,18 +47,14 @@ function WindyEmbed({ location, overlay, title, sub }) {
           Open in Windy ↗
         </a>
       </div>
-      <iframe
-        key={src}
-        title={title}
+      <EmbedFrame
         src={src}
-        className="road-frame"
-        loading="lazy"
+        title={title}
+        externalUrl={ext}
+        externalLabel="Open in Windy ↗"
         allow="fullscreen"
-        frameBorder="0"
+        note={note}
       />
-      <div className="obs-note">
-        Windy.com embed centered on <strong>{location.name}</strong>.
-      </div>
     </Panel>
   );
 }
@@ -91,6 +88,10 @@ export function WindyWaves({ location }) {
       overlay="waves"
       title="Windy — Waves"
       sub="Windy.com · waves overlay"
+      // The waves model is defined over open water only. At an inland location
+      // (Tahoe, Reno, Denver) the overlay is legitimately empty — say so, so an
+      // empty map doesn't read as a broken panel.
+      note="Wave data exists over oceans only; inland locations show base map with no overlay — that's expected, not a failure."
     />
   );
 }
