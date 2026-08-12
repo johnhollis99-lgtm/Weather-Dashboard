@@ -303,6 +303,39 @@ body.wx-standalone #root { min-height: 100vh; }
 .wx-dash .img-frame img { max-width: 100%; height: auto; display: block; }
 .wx-dash .sat-img { width: 100%; height: auto; display: block; border-radius: 8px; }
 
+/* Satellite time-lapse: every frame resident and stacked, exactly one at full
+   opacity. Swapping opacity on loaded frames is what makes scrubbing instant —
+   the alternative (one <img> whose src changes) re-downloads on every step.
+
+   The container needs its own height because absolutely-positioned children
+   contribute none. aspect-ratio supplies it without a magic number: every GOES
+   product this panel requests is square (600x600, 500x500, 678x678), so the box
+   is correct before a single byte has loaded and the panel never reflows. */
+.wx-dash .sat-loop {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-panel-2);
+}
+.wx-dash .sat-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* contain, not cover: a product that ever ships non-square would be letterboxed
+     rather than silently cropped, and cropping weather imagery loses signal. */
+  object-fit: contain;
+  display: block;
+}
+/* No opacity transition: at 450 ms a frame it would cross-fade every step and
+   read as a blur rather than as motion. Honour the reduced-motion preference
+   anyway for the frames the reader steps through by hand. */
+@media (prefers-reduced-motion: no-preference) {
+  .wx-dash .sat-frame { transition: opacity 60ms linear; }
+}
+
 .wx-dash .timeline { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .wx-dash .timeline input[type=range] { flex: 1; }
 .wx-dash .frame-label { font-size: 12px; color: var(--text-dim); min-width: 150px; }
