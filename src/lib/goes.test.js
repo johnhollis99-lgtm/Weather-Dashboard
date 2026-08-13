@@ -5,15 +5,26 @@ import {
   FRAME_COUNT,
   FULL_DISK,
   GOES_VIEWS,
+  LOAD_CONCURRENCY,
+  LOAD_QUORUM,
   MAX_FRAMES,
   alignToSlot,
   buildGoesFrames,
+  crossesUTCDay,
   dayOfYearUTC,
   decodedBytes,
   defaultDurationH,
   describeLoop,
+  formatStampUTC,
+  frameIntervalMs,
+  frameLoadOrder,
+  gapIsMisleading,
   goesFrameUrl,
+  missingTolerance,
   planLoop,
+  playbackQuorum,
+  summarizeGaps,
+  terminatorCrossings,
   goesLatestUrl,
   goesStamp,
   parseGoesStamp,
@@ -465,6 +476,219 @@ describe('load bookkeeping', () => {
   it('keeps usable frames in window order, oldest first', () => {
     const s = summarizeFrameLoad(frames, { a: 'ok', b: 'fail', c: 'ok' });
     expect(s.usable.map((f) => f.url)).toEqual(['a', 'c']);
+  });
+});
+
+describe('progressive loading', () => {
+  it('requests the newest frame first, then coarse to fine', () => {
+    const order = frameLoadOrder(96);
+    expect(order[0]).toBe(95); // newest — what the panel shows at rest
+    // The next twelve are stride-8, spanning the entire window rather than
+    // clustering at one end.
+    expect(order.slice(1, 13)).toEqual([0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88]);
+  });
+
+  it('is a permutation — every frame is requested exactly once', () => {
+    for (const n of [1, 2, 3, 6, 12, 36, 72, 96]) {
+      const order = frameLoadOrder(n);
+      expect(order).toHaveLength(n);
+      expect(new Set(order).size).toBe(n);
+      expect([...order].sort((a, b) => a - b)).toEqual(Array.from({ length: n }, (_, i) => i));
+    }
+    expect(frameLoadOrder(0)).toEqual([]);
+  });
+
+  it('spreads its first frames across the window, unlike sequential order', () => {
+    // The property that matters: at quorum the loop must span the whole window.
+    // Sequential order would have covered only the oldest quarter of it.
+    const n = 96;
+    const first = frameLoadOrder(n).slice(0, LOAD_QUORUM);
+    expect(Math.min(...first)).toBe(0);
+    expect(Math.max(...first)).toBe(n - 1);
+    const sorted = [...first].sort((a, b) => a - b);
+    const widest = Math.max(...sorted.slice(1).map((v, i) => v - sorted[i]));
+    expect(widest).toBeLessThanOrEqual(8);
+  });
+
+  it('holds exactly LOAD_CONCURRENCY requests open as frames resolve', () => {
+    // The mount window the panel derives: resolved + concurrency, capped.
+    const n = 96;
+    for (const resolved of [0, 1, 30, 89, 90, 96]) {
+      const mounted = Math.min(n, resolved + LOAD_CONCURRENCY);
+      expect(mounted - resolved).toBe(Math.min(LOAD_CONCURRENCY, n - resolved));
+    }
+  });
+
+  it('demands a quorum only from windows big enough to have one', () => {
+    expect(playbackQuorum(6)).toBeNull();
+    expect(playbackQuorum(12)).toBeNull();
+    expect(playbackQuorum(24)).toBeNull(); // 24 of 24 is just `settled`
+    expect(playbackQuorum(36)).toBe(24);
+    expect(playbackQuorum(72)).toBe(24);
+    expect(playbackQuorum(96)).toBe(24);
+  });
+});
+
+describe('playback cadence', () => {
+  it('holds the cycle at ten seconds across the whole fill', () => {
+    // The failure this replaces: deriving from the TARGET count would hold every
+    // frame for 104 ms, so the 24-frame quorum loop would cycle in 2.5 s and
+    // visibly slow to 10 s as the rest landed.
+    for (const usable of [24, 30, 36, 48, 60, 72, 84, 96]) {
+      const cycle = usable * frameIntervalMs(usable);
+      expect(cycle).toBeGreaterThan(9_800);
+      expect(cycle).toBeLessThan(10_200);
+    }
+  });
+
+  it('starts at a ten-second cycle the instant quorum is met', () => {
+    // Why the quorum is a flat 24 and not a fraction: at 9 or 18 frames the
+    // 450 ms ceiling binds and the cycle would start at 4.05 s or 8.10 s.
+    expect(frameIntervalMs(LOAD_QUORUM)).toBe(417);
+    expect(LOAD_QUORUM * frameIntervalMs(LOAD_QUORUM)).toBeCloseTo(10_008, -2);
+    expect(frameIntervalMs(9)).toBe(450); // would have been 4.05 s
+    expect(frameIntervalMs(18)).toBe(450); // would have been 8.10 s
+  });
+
+  it('leaves the short windows at the 450 ms this panel shipped with', () => {
+    expect(frameIntervalMs(12)).toBe(450);
+    expect(frameIntervalMs(6)).toBe(450);
+  });
+
+  it('applies the speed multiplier and never goes below the paint floor', () => {
+    expect(frameIntervalMs(96, 1)).toBe(104);
+    expect(frameIntervalMs(96, 2)).toBe(60); // floored, not 52
+    expect(frameIntervalMs(96, 0.5)).toBe(208);
+    expect(frameIntervalMs(12, 2)).toBe(225);
+    expect(frameIntervalMs(12, 0.5)).toBe(900);
+  });
+});
+
+describe('missing-frame tolerance', () => {
+  it('reproduces the old flat constant for the window it was written for', () => {
+    // EXPECTED_MISSING was 2, for a twelve-frame native sector window. Rounding
+    // rather than ceiling the history term is what keeps it at exactly 2 instead
+    // of quietly loosening the shipped default to 3.
+    expect(missingTolerance({ count: 12, stepMin: 5 })).toBe(2);
+  });
+
+  it('shrinks its leading-edge allowance as the step grows', () => {
+    // Two unpublished slots is plausible at 5-minute steps and impossible at 60:
+    // only one slot can be newer than the CDN's ~10-minute publish lag.
+    expect(missingTolerance({ count: 12, stepMin: 5 })).toBe(2);
+    expect(missingTolerance({ count: 12, stepMin: 10 })).toBe(1);
+    expect(missingTolerance({ count: 12, stepMin: 60 })).toBe(1);
+  });
+
+  it('evaluates to these values on the rungs the panel offers', () => {
+    const at = (view, durationH) => {
+      const p = planLoop({ view, durationH });
+      return missingTolerance({ count: p.count, stepMin: p.stepMin });
+    };
+    expect(at('psw', 1)).toBe(2); // 12 frames, 5-min
+    expect(at('psw', 3)).toBe(3); // 36 frames, 5-min
+    expect(at('psw', 6)).toBe(4); // 72 frames, 5-min
+    expect(at('psw', 12)).toBe(3); // 72 frames, 10-min
+    expect(at('psw', 24)).toBe(4); // 96 frames, 15-min
+    expect(at('psw', 48)).toBe(4); // 96 frames, 30-min
+    expect(at('psw', 72)).toBe(3); // 72 frames, 60-min
+    expect(at(FULL_DISK, 72)).toBe(3);
+  });
+
+  it('stays above the loss actually measured on the CDN', () => {
+    // Trailing 72 h: 0.00% on band 08 everywhere, 1.39% worst case on GEOCOLOR.
+    for (const view of Object.keys(GOES_VIEWS)) {
+      for (const durationH of DURATION_PRESETS) {
+        const p = planLoop({ view, durationH });
+        const worstMeasured = Math.round(p.count * 0.0139);
+        expect(missingTolerance(p)).toBeGreaterThanOrEqual(worstMeasured);
+      }
+    }
+  });
+});
+
+describe('gap shape', () => {
+  const win = (n, stepMin = 5) =>
+    buildGoesFrames({ now: NOW, view: 'psw', band: '08', count: n, stepMin });
+  const mark = (frames, failAt) =>
+    Object.fromEntries(frames.map((f, i) => [f.url, failAt.includes(i) ? 'fail' : 'ok']));
+
+  it('reports scattered singletons as a run of one', () => {
+    // The psw/pnw pattern measured over 72 h: six isolated holes, no two adjacent.
+    const frames = win(72);
+    const g = summarizeGaps(frames, mark(frames, [4, 17, 33, 48, 55, 66]));
+    expect(g.missing).toBe(6);
+    expect(g.longestRun).toBe(1);
+    expect(gapIsMisleading({ longestRun: g.longestRun, stepMin: 5 })).toBe(false);
+  });
+
+  it('reports a contiguous outage as one run, and where it starts', () => {
+    // The wus/FD pattern: three adjacent slots gone at once.
+    const frames = win(72, 10);
+    const g = summarizeGaps(frames, mark(frames, [20, 21, 22]));
+    expect(g.missing).toBe(3);
+    expect(g.longestRun).toBe(3);
+    expect(g.gapStartTime).toBe(frames[20].time);
+    expect(gapIsMisleading({ longestRun: 3, stepMin: 10 })).toBe(true); // 30 min
+  });
+
+  it('separates the longest run from scattered frames elsewhere', () => {
+    const frames = win(72);
+    const g = summarizeGaps(frames, mark(frames, [3, 30, 31, 32, 33, 34, 35, 60]));
+    expect(g.missing).toBe(8);
+    expect(g.longestRun).toBe(6);
+    expect(g.missing - g.longestRun).toBe(2);
+  });
+
+  it('judges a hole by the time it removes, not the frames', () => {
+    // Three slots is 15 minutes natively and 3 hours at hourly steps. The same
+    // run length is unremarkable in one window and a false jump in the other.
+    expect(gapIsMisleading({ longestRun: 3, stepMin: 5 })).toBe(false); // 15 min
+    expect(gapIsMisleading({ longestRun: 6, stepMin: 5 })).toBe(true); // 30 min
+    expect(gapIsMisleading({ longestRun: 1, stepMin: 60 })).toBe(false); // one slot
+    expect(gapIsMisleading({ longestRun: 2, stepMin: 60 })).toBe(true); // 2 h
+    expect(gapIsMisleading({ longestRun: 0, stepMin: 5 })).toBe(false);
+  });
+
+  it('counts only frames that answered, never ones still in flight', () => {
+    // Mid-fill, an unresolved frame is not a hole. Treating it as one would make
+    // every window look broken while it loaded.
+    const frames = win(12);
+    expect(summarizeGaps(frames, {})).toMatchObject({ missing: 0, longestRun: 0 });
+    expect(summarizeGaps(frames, { [frames[0].url]: 'ok' }).missing).toBe(0);
+  });
+});
+
+describe('UTC stamps and terminator crossings', () => {
+  it('is UTC, and dates itself only once the window outlives a day', () => {
+    const t = Date.parse('2026-08-13T20:11:00Z');
+    expect(formatStampUTC(t)).toBe('20:11Z');
+    expect(formatStampUTC(t, { withDate: true })).toBe('13 Aug 20:11Z');
+    expect(formatStampUTC(Date.parse('2026-08-03T04:05:00Z'), { withDate: true })).toBe(
+      '3 Aug 04:05Z',
+    );
+  });
+
+  it('detects a UTC midnight crossing, not a wall-clock one', () => {
+    expect(crossesUTCDay(Date.parse('2026-08-13T01:00Z'), Date.parse('2026-08-13T23:00Z'))).toBe(
+      false,
+    );
+    expect(crossesUTCDay(Date.parse('2026-08-13T23:55Z'), Date.parse('2026-08-14T00:05Z'))).toBe(
+      true,
+    );
+    // Same day-of-month, different month — a naive getUTCDate() compare misses this.
+    expect(crossesUTCDay(Date.parse('2026-08-13T00:00Z'), Date.parse('2026-09-13T00:00Z'))).toBe(
+      true,
+    );
+  });
+
+  it('counts a dusk and a dawn per day', () => {
+    expect(terminatorCrossings(72)).toBe(6);
+    expect(terminatorCrossings(48)).toBe(4);
+    expect(terminatorCrossings(24)).toBe(2);
+    expect(terminatorCrossings(12)).toBe(1);
+    expect(terminatorCrossings(6)).toBe(0);
+    expect(terminatorCrossings(1)).toBe(0);
   });
 });
 

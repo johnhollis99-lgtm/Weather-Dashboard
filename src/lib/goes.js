@@ -350,6 +350,209 @@ export function summarizeFrameLoad(frames, status) {
 }
 
 /**
+ * How many frames may be in flight at once.
+ *
+ * The CDN negotiates h2 on a real request and advertises 128 concurrent streams,
+ * so the browser's old six-connection ceiling does not apply and this number is
+ * ours to choose. Measured, the choice barely matters: fetching 48 frames at
+ * concurrency 4, 6, 12 and 24 differed by less than the run-to-run variance,
+ * because the transfer is bandwidth-bound long before it is connection-bound.
+ * Six is kept for the reasons that survive that finding — it saturates the link
+ * with margin, and it strands fewer half-transferred frames when a band or
+ * duration switch abandons the queue.
+ */
+export const LOAD_CONCURRENCY = 6;
+
+/**
+ * Frames that must land before the loop is allowed to start playing.
+ *
+ * A flat count rather than a fraction, and 24 specifically, because of how it
+ * meets frameIntervalMs: below about 22 frames the 450 ms ceiling binds, so a
+ * quorum any smaller would start the loop cycling faster than it will once full
+ * and then visibly slow down. At 24 the cycle is already 10 s and stays there.
+ */
+export const LOAD_QUORUM = 24;
+
+/**
+ * Frames a window must want before quorum applies at all.
+ *
+ * At or below the quorum there is nothing to gain — waiting for 24 of 24 is
+ * waiting for all of them — so short windows keep requiring `settled` and behave
+ * exactly as they did before progressive loading existed.
+ */
+export function playbackQuorum(count) {
+  return count > LOAD_QUORUM ? LOAD_QUORUM : null;
+}
+
+/**
+ * The order frames are requested in: newest first, then coarse to fine.
+ *
+ * Sequential order would be actively wrong here. The first frames to land would
+ * be the oldest contiguous handful — a subset that spans almost none of the
+ * window and shows almost no motion — so the loop would sit at quorum showing
+ * the first hour of a 72-hour span. Halving strides instead means the first
+ * dozen frames are spread across the whole window, and every later frame
+ * subdivides what is already there: the loop starts coarse over the full span
+ * and densifies in place rather than growing from one end.
+ *
+ * The newest frame jumps the queue because it is what the panel displays at
+ * rest, before playback is possible at all — it is the difference between a
+ * first paint at 250 ms and one at quorum.
+ *
+ * summarizeFrameLoad filters `frames` in window order, so a scattered subset is
+ * still time-ordered and plays as a valid coarse loop with no extra work.
+ */
+export function frameLoadOrder(n) {
+  if (!(n > 0)) return [];
+  const seen = new Set();
+  const out = [];
+  const push = (i) => {
+    if (!seen.has(i)) {
+      seen.add(i);
+      out.push(i);
+    }
+  };
+  push(n - 1);
+  for (let stride = 8; stride >= 1; stride = Math.floor(stride / 2)) {
+    for (let i = 0; i < n; i += stride) push(i);
+  }
+  return out;
+}
+
+/** Wall-clock time one pass over the whole window should take. */
+export const TARGET_CYCLE_MS = 10_000;
+
+/**
+ * How long each frame is held, from the number of frames ACTUALLY playable.
+ *
+ * Deriving this from the window's target count instead is the subtle failure:
+ * playback begins at quorum, so a 96-frame target would hold each of the first
+ * 24 frames for 104 ms and rip through the whole span in 2.5 s, then gradually
+ * slow to 10 s as the rest arrived. Deriving it from what is on screen holds the
+ * cycle at 10 s from the first played frame to the last — the coarse loop
+ * crosses the window at the speed the full one will, just in bigger jumps.
+ *
+ * The 450 ms ceiling is the value this panel shipped with and preserves the
+ * short windows exactly; the 100 ms floor is where further speed stops reading
+ * as motion and starts costing paints.
+ */
+export function frameIntervalMs(usableCount, speed = 1) {
+  const base = Math.min(450, Math.max(100, Math.round(TARGET_CYCLE_MS / Math.max(usableCount, 1))));
+  return Math.max(60, Math.round(base / speed));
+}
+
+/**
+ * Publish latency to allow for at the leading edge, minutes. GEOCOLOR renders
+ * slower than the 3–5 minutes the raw bands take, so this is the generous end.
+ */
+const PUBLISH_LAG_MIN = 10;
+
+/**
+ * Share of a window's frames that may be missing from HISTORY before it is worth
+ * mentioning. Measured loss over a trailing 72 h was 0.0% on band 08 across
+ * every view and 0.69–1.39% on GEOCOLOR, so 3% is roughly twice the worst real
+ * case — loose enough that an ordinary day stays silent, tight enough that the
+ * note still means something when it appears.
+ */
+const HISTORICAL_GAP_RATE = 0.03;
+
+/**
+ * How many missing frames are ordinary for a window of this shape.
+ *
+ * Two terms, because the old flat constant conflated two things that scale in
+ * opposite directions. The leading-edge term covers slots the CDN has not
+ * published yet and SHRINKS as the step grows — at 5-minute steps the newest two
+ * slots can plausibly be absent, at 60-minute steps only the current one can be.
+ * The history term covers holes behind the leading edge and grows with the frame
+ * count. Rounding rather than ceiling the history term is what makes a
+ * twelve-frame native window come out at exactly 2, the constant this panel
+ * shipped with, instead of quietly loosening it to 3.
+ */
+export function missingTolerance({ count, stepMin }) {
+  const leadingEdge = Math.max(1, Math.ceil(PUBLISH_LAG_MIN / stepMin));
+  return leadingEdge + Math.round(count * HISTORICAL_GAP_RATE);
+}
+
+/**
+ * Where the holes are, not just how many.
+ *
+ * Six isolated missing frames and one six-frame hole are the same number and
+ * different events. Scattered singletons make the loop marginally choppier;
+ * a contiguous run removes a stretch of time, so the frames either side of it
+ * abut and the reader sees cloud jump a distance it never travelled. The second
+ * is the one that can be misread as weather, so the panel has to be able to say
+ * which happened and where.
+ *
+ * Only an explicit 'fail' counts as missing — an unresolved frame is still in
+ * flight, and treating it as a hole would make every window look broken while it
+ * loaded.
+ */
+export function summarizeGaps(frames, status) {
+  let missing = 0;
+  let run = 0;
+  let longestRun = 0;
+  let longestEnd = -1;
+  frames.forEach((f, i) => {
+    if (status[f.url] === 'fail') {
+      missing += 1;
+      run += 1;
+      if (run > longestRun) {
+        longestRun = run;
+        longestEnd = i;
+      }
+    } else {
+      run = 0;
+    }
+  });
+  const longestStart = longestRun ? longestEnd - longestRun + 1 : -1;
+  return {
+    missing,
+    longestRun,
+    longestStart,
+    // The instant the hole opens: the last good frame before it is at
+    // longestStart - 1, so the gap begins at the first absent slot.
+    gapStartTime: longestStart >= 0 ? frames[longestStart].time : null,
+  };
+}
+
+/**
+ * Is the largest hole big enough that motion across it would mislead?
+ *
+ * Time, not frame count: three missing slots is fifteen minutes at native
+ * cadence and three hours at hourly steps. Half an hour is the floor at which a
+ * jump stops being a stutter, and two steps is the floor below which no gap can
+ * exist at all.
+ */
+export function gapIsMisleading({ longestRun, stepMin }) {
+  const gapMin = longestRun * stepMin;
+  return gapMin >= Math.max(30, 2 * stepMin);
+}
+
+/** Two-digit UTC clock, and the date too once a window outlives one UTC day. */
+const MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
+export function formatStampUTC(ms, { withDate = false } = {}) {
+  const d = new Date(ms);
+  const clock = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}Z`;
+  return withDate ? `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${clock}` : clock;
+}
+
+/** Does this window straddle a UTC midnight? If so its stamps need dates. */
+export function crossesUTCDay(aMs, bMs) {
+  return Math.floor(aMs / 86_400_000) !== Math.floor(bMs / 86_400_000);
+}
+
+/**
+ * Roughly how many day/night terminator passages a window contains.
+ *
+ * One dusk and one dawn per 24 hours, so a span divided by twelve. Deliberately
+ * approximate — the true count moves with season, latitude and what time of day
+ * the window starts — and the copy that uses it says "about".
+ */
+export function terminatorCrossings(durationH) {
+  return Math.floor(durationH / 12);
+}
+
+/**
  * Drop outcomes for frames that have left the window.
  *
  * This is also the whole reset story: a band or view switch changes every URL,

@@ -342,6 +342,50 @@ body.wx-standalone #root { min-height: 100vh; }
 .wx-dash .sat-degraded { margin-top: 6px; }
 .wx-dash .sat-degraded strong { color: var(--warn); font-weight: 600; }
 
+/* Fill progress and the terminator note are both caption tier and neither is a
+   fault, so they carry no warning colour — unlike .sat-degraded above, which
+   reports something the CDN failed to deliver. */
+.wx-dash .sat-fill { margin-top: 6px; }
+.wx-dash .sat-terminator { margin-top: 6px; }
+.wx-dash .sat-terminator em { font-style: normal; color: var(--text); font-weight: 600; }
+
+/* Determinate, because the reader's question during a long buffer is "how much
+   longer", which a spinner cannot answer. */
+.wx-dash .load-bar {
+  display: block;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--bg-panel-2);
+  overflow: hidden;
+}
+.wx-dash .load-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 150ms linear;
+}
+
+/* The frame's own UTC stamp, on the imagery. Over a multi-day window this is the
+   only thing distinguishing one afternoon from the next, and it has to sit where
+   the eye is during playback — which is the picture, not the transport row. */
+.wx-dash .sat-stamp {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(4, 12, 18, 0.72);
+  color: #eaf2f7;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
 .wx-dash .timeline { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .wx-dash .timeline input[type=range] { flex: 1; }
 .wx-dash .frame-label { font-size: 12px; color: var(--text-dim); min-width: 150px; }
