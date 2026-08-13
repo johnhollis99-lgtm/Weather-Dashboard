@@ -71,10 +71,26 @@ Once it's at an HTTPS URL, open that URL on your phone:
 - **Android (Chrome):** menu → **Install app** (or the install prompt).
 - **Desktop (Chrome/Edge):** install icon in the address bar.
 
-You get a full-screen home-screen app with the radar icon. The service worker
-caches the app shell for instant launch but **always fetches live weather data
-fresh** (never serves stale obs/radar). Regenerate icons with
+You get a full-screen home-screen app with the radar icon. Regenerate icons with
 `node scripts/gen-icons.mjs`.
+
+> **No service worker ships today**, so there is no offline launch and no shell
+> caching. Registration was disabled on 2026-06-26 while debugging embeds, and
+> `public/sw.js` was deleted once nothing registered it — recover it from
+> `4b8d123` if it is ever wanted.
+>
+> **Reviving one means reworking paths first.** `manifest.webmanifest` declares
+> `"start_url": "/"` and `"scope": "/"`, and the deleted worker cached `'/'` as
+> its shell. All three are root-absolute, and all three are wrong under the
+> `/weather/` base that `npm run build:conductor` emits for the Conductor embed —
+> so an embedded-aware PWA needs them derived from the base rather than
+> hardcoded. Check current browser install criteria at the same time; they have
+> historically wanted a worker with a `fetch` handler, and that may have moved.
+>
+> One more constraint, learned the hard way: any service-worker code here must
+> stay out of the Conductor build. Embedded, this app runs same-origin at
+> `/weather/`, where the SW APIs address the **host's** registrations, not its
+> own. See the guard in `src/main.jsx`.
 
 > Security note: a public URL exposes the proxy routes. They're all whitelisted
 > (no open proxy), but if you want it private, deploy with Render's access

@@ -17,8 +17,13 @@ fetched directly from the browser. All data sources are **keyless/public**.
   built UI **and** `/api/*` on one port (`process.env.PORT`).
 - Deploy: `render.yaml` (free Render web service). Push to GitHub → Render →
   New → Blueprint.
-- PWA: `public/manifest.webmanifest` + `public/sw.js` + icons (`public/*.png`,
-  regenerate with `node scripts/gen-icons.mjs`). SW registers in prod only.
+- PWA: `public/manifest.webmanifest` + icons (`public/*.png`, regenerate with
+  `node scripts/gen-icons.mjs`). **No service worker** — registration was
+  disabled 2026-06-26 and `public/sw.js` deleted (recoverable at `4b8d123`), so
+  there is no offline launch. Read the README's PWA note before reviving one:
+  the manifest's `start_url`/`scope` are root-absolute and break under the
+  `/weather/` base, and SW code must never reach the Conductor build, where
+  those APIs address the host's registrations rather than ours.
 
 ## Architecture
 ```
