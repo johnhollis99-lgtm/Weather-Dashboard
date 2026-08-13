@@ -119,6 +119,118 @@ export function goesLatestUrl({ view, band, size }) {
   return `${dir}/${size}.jpg`;
 }
 
+// --- loop planning: duration → step, frame count, resolution -----------------
+//
+// Seventy-two hours at native cadence is 864 frames, so a duration control is
+// really a decimation policy wearing a duration's clothes. Three quantities move
+// together — how far back the window reaches, how coarsely it samples, and at
+// what resolution — and they are decided here, together, so the panel exposes
+// one control instead of three that can be set into combinations that make no
+// sense (72 hours of 5-minute frames at 600x600 is 864 frames and 1.2 GB).
+
+/**
+ * Selectable window lengths, hours.
+ *
+ * The CDN retains ~240 h — measured, not assumed — so 72 is a chosen ceiling
+ * rather than a limit of the data. Seven rungs is what fits one row at 380px.
+ */
+export const DURATION_PRESETS = [1, 3, 6, 12, 24, 48, 72];
+
+/**
+ * Sampling intervals the loop may use, minutes, coarsest last.
+ *
+ * A step is eligible for a view only if it is a whole multiple of that view's
+ * scan cadence, which is the invariant that keeps every computed slot a real
+ * scan: stepping a 5-minute sector by 15 lands on :01, :16, :31 — all of which
+ * the CDN publishes — while stepping it by 7 would land almost entirely on
+ * timestamps that have never existed. That also means 15 and 5 are available to
+ * the sectors and not to the 10-minute views, which is correct rather than an
+ * oversight. 45 is deliberately absent: it satisfies the frame cap at 72 h but
+ * puts frames on minutes past the hour that no reader can anticipate.
+ */
+const STEP_LADDER_MIN = [5, 10, 15, 20, 30, 60];
+
+/**
+ * Frame ceiling, whatever the duration.
+ *
+ * Past this the loop costs more than it shows: decode time, resident memory, and
+ * a scrubber on which a single pixel covers several frames.
+ */
+export const MAX_FRAMES = 96;
+
+/**
+ * Decoded-image budget in BYTES, decimal MB.
+ *
+ * Every frame stays mounted so the loop can animate by swapping opacity, which
+ * means every frame stays painted and therefore stays decoded. `w × h × 4 ×
+ * count` is a real resident figure here, not a pessimistic bound — it is the
+ * direct price of stepping and scrubbing never touching the network, and it is
+ * why this panel cannot be reasoned about like an ordinary image gallery that
+ * lets the browser evict and re-decode at will.
+ */
+export const DECODED_BUDGET_BYTES = 70_000_000;
+
+/**
+ * The resolutions of each view worth loading, largest first.
+ *
+ * Retention is resolution-independent — every size in a CDN directory shares an
+ * oldest stamp, measured across all four views — so this list costs nothing in
+ * history depth and is purely a memory decision. The next tier up from these
+ * (1200x1200 on the sectors) is 414 MB decoded at 72 frames and is never viable,
+ * which is why each view offers exactly two.
+ */
+export const GOES_TIERS = {
+  psw: ['600x600', '300x300'],
+  pnw: ['600x600', '300x300'],
+  wus: ['500x500', '250x250'],
+  [FULL_DISK]: ['678x678', '339x339'],
+};
+
+/** Resident decoded bytes for `count` frames at a `WxH` size. */
+export function decodedBytes(size, count) {
+  const [w, h] = String(size).split('x').map(Number);
+  return w * h * 4 * count;
+}
+
+/**
+ * Resolve a chosen duration into the loop that will actually be built.
+ *
+ * Step first: the smallest eligible interval that keeps the count at or under
+ * MAX_FRAMES. Resolution second: the largest tier that fits the decode budget at
+ * that count. The order matters — resolution is chosen against the frame count
+ * the step produced, so a duration that decimates harder is allowed to keep more
+ * pixels per frame.
+ */
+export function planLoop({ view, durationH }) {
+  const cfg = GOES_VIEWS[view];
+  if (!cfg) return null;
+  const totalMin = durationH * 60;
+  const stepMin =
+    STEP_LADDER_MIN.find(
+      (s) => s % cfg.cadenceMin === 0 && Math.round(totalMin / s) <= MAX_FRAMES,
+    ) ?? STEP_LADDER_MIN.at(-1);
+  const count = Math.round(totalMin / stepMin);
+  const tiers = GOES_TIERS[view] ?? [cfg.size];
+  const size = tiers.find((s) => decodedBytes(s, count) <= DECODED_BUDGET_BYTES) ?? tiers.at(-1);
+  return { durationH, stepMin, count, size, spanMin: (count - 1) * stepMin };
+}
+
+/**
+ * The rung a view opens on: the first that is at least as dense as the
+ * twelve-frame loop this panel shipped before the control existed.
+ *
+ * Derived rather than constant, because the same rung means different things
+ * either side of the cadence split — one hour is twelve frames on a 5-minute
+ * sector but six on the 10-minute views, and opening the full disk on six frames
+ * would be a regression wearing a default's clothes.
+ */
+export function defaultDurationH(view) {
+  const found = DURATION_PRESETS.find(
+    (h) => (planLoop({ view, durationH: h })?.count ?? 0) >= FRAME_COUNT,
+  );
+  return found ?? DURATION_PRESETS[0];
+}
+
 /**
  * The loop, oldest frame first — the direction every satellite loop the reader
  * has ever seen runs, and the direction the scrubber therefore reads.
@@ -128,15 +240,29 @@ export function goesLatestUrl({ view, band, size }) {
  * intentional: pruning a 404 costs nothing, while back-dating the window by a
  * fixed guess would throw away real frames every time the CDN ran ahead of the
  * guess. Freshness is worth more than a clean first paint here.
+ *
+ * `stepMin` and `size` are additive and default to the view's own cadence and
+ * size, so a call that omits them builds precisely the window this function
+ * built before they existed. Two details of the decimated case are load-bearing:
+ *
+ *   • The newest slot is still aligned to the view's CADENCE, never to the step.
+ *     Aligning to an hourly step would date the leading frame up to an hour back
+ *     even when a scan from four minutes ago is sitting on the CDN, throwing
+ *     away exactly the freshness the paragraph above argues for.
+ *   • Every older slot is then `newest - i × step`, which stays on a real scan
+ *     boundary only because a step is always a whole multiple of the cadence.
+ *     planLoop enforces that; this function relies on it.
  */
-export function buildGoesFrames({ now, view, band, count = FRAME_COUNT }) {
+export function buildGoesFrames({ now, view, band, count = FRAME_COUNT, stepMin, size }) {
   const cfg = GOES_VIEWS[view];
   if (!cfg) return [];
+  const step = stepMin ?? cfg.cadenceMin;
+  const px = size ?? cfg.size;
   const t = now instanceof Date ? now.getTime() : now;
   const newest = alignToSlot(t, cfg.cadenceMin, cfg.phaseMin);
   const frames = [];
   for (let i = count - 1; i >= 0; i -= 1) {
-    const time = newest - i * cfg.cadenceMin * 60_000;
+    const time = newest - i * step * 60_000;
     const stamp = goesStamp(time);
     frames.push({
       view,
@@ -144,7 +270,7 @@ export function buildGoesFrames({ now, view, band, count = FRAME_COUNT }) {
       stamp,
       time,
       timeBasis: 'observed',
-      url: goesFrameUrl({ view, band, size: cfg.size, stamp }),
+      url: goesFrameUrl({ view, band, size: px, stamp }),
     });
   }
   return frames;

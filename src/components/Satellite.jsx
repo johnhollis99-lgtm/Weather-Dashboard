@@ -3,11 +3,14 @@ import Panel from './Panel.jsx';
 import { goesSectorConfig } from '../lib/locations.js';
 import { evaluateStaleness } from '../lib/radar.js';
 import {
+  DURATION_PRESETS,
   FULL_DISK,
   GOES_VIEWS,
   buildGoesFrames,
+  defaultDurationH,
   describeLoop,
   goesLatestUrl,
+  planLoop,
   pruneFrameStatus,
   staleThresholdMin,
   summarizeFrameLoad,
@@ -91,11 +94,23 @@ function usePrefersReducedMotion() {
 export default function Satellite({ location, refreshKey }) {
   const [band, setBand] = useState('08'); // upper-level WV default
   const [fullDisk, setFullDisk] = useState(false);
+  // null is "not chosen yet", not a duration. While it holds, the view supplies
+  // its own default and keeps supplying it as the view changes — so switching to
+  // the full disk moves 1h → 3h rather than stranding it on a six-frame loop.
+  // The first click pins the reader's choice, the way `playing` is pinned.
+  const [durationH, setDurationH] = useState(null);
   const reducedMotion = usePrefersReducedMotion();
 
   const sector = goesSectorConfig(location.lat, location.lon).code;
   const view = fullDisk ? FULL_DISK : sector;
   const cfg = GOES_VIEWS[view];
+  const activeDurationH = durationH ?? defaultDurationH(view);
+  // Step, frame count and resolution all fall out of the duration together — see
+  // planLoop for why they cannot be chosen independently.
+  const plan = useMemo(
+    () => planLoop({ view, durationH: activeDurationH }),
+    [view, activeDurationH],
+  );
 
   // Per-frame load outcome, URL → 'ok' | 'fail'. A 'fail' is normally just the
   // newest slot not published yet (the CDN runs 3–5 min behind the scan time,
@@ -107,9 +122,23 @@ export default function Satellite({ location, refreshKey }) {
   const [playing, setPlaying] = useState(!reducedMotion);
 
   // Pure data — no fetching here; the <img> tags below do the loading.
+  //
+  // A duration change rewrites the window the same way a band or view change
+  // does, so pruneFrameStatus drops the old verdicts on its own. One case does
+  // better than that by accident and is worth not breaking: adjacent rungs that
+  // share a step and a resolution (1h → 3h, both 5-minute 600x600) produce
+  // overlapping URLs, so the twelve frames already loaded survive the switch.
   const frames = useMemo(
-    () => buildGoesFrames({ now: Date.now(), view, band }),
-    [view, band, refreshKey],
+    () =>
+      buildGoesFrames({
+        now: Date.now(),
+        view,
+        band,
+        count: plan.count,
+        stepMin: plan.stepMin,
+        size: plan.size,
+      }),
+    [view, band, refreshKey, plan],
   );
 
   useEffect(() => {
@@ -158,7 +187,10 @@ export default function Satellite({ location, refreshKey }) {
   const staleness = evaluateStaleness({
     newestTime: usable.length ? usable.at(-1).time : null,
     now: Date.now(),
-    thresholdMin: staleThresholdMin(view),
+    // The loop's step, not the view's cadence: a 60-minute-step window has a
+    // newest frame up to an hour old by construction, and judging that against
+    // psw's 20-minute cadence threshold would show the stale banner permanently.
+    thresholdMin: staleThresholdMin(view, plan.stepMin),
     basis: 'observed',
   });
   const stale = staleness.level === 'stale';
@@ -188,6 +220,31 @@ export default function Satellite({ location, refreshKey }) {
         <button className={fullDisk ? 'active' : ''} onClick={() => setFullDisk(true)}>
           Full Disk
         </button>
+      </div>
+      {/* Duration sits with band and view, above the imagery, because all three
+          change WHAT IS LOADED. The transport below the imagery changes only how
+          you look at what is already loaded. Keeping those two classes on
+          opposite sides of the picture is the grammar this panel already had.
+
+          Seven rungs at ~42px is ~330px, so this holds one row at 380px; .btn-row
+          is flex-wrap: wrap, so it falls to a second row rather than clipping if
+          it ever does not. */}
+      <div className="btn-row" style={{ marginBottom: 10 }}>
+        {DURATION_PRESETS.map((h) => {
+          const p = planLoop({ view, durationH: h });
+          return (
+            <button
+              key={h}
+              className={activeDurationH === h ? 'active' : ''}
+              onClick={() => setDurationH(h)}
+              // The consequences of the rung, which are otherwise invisible
+              // until the picture softens: how many frames, how coarse, how big.
+              title={`${p.count} frames · ${p.stepMin}-min steps · ${p.size}`}
+            >
+              {h}h
+            </button>
+          );
+        })}
       </div>
 
       {/* --- honest states, most severe first --- */}
@@ -293,7 +350,11 @@ export default function Satellite({ location, refreshKey }) {
             itself in its own footnote. describeLoop owns the wording, including
             which interval is the honest one to quote. */}
         {canLoop &&
-          ` · ${describeLoop({ spanMin: span, stepMin: cfg.cadenceMin, cadenceMin: cfg.cadenceMin })}`}
+          ` · ${describeLoop({ spanMin: span, stepMin: plan.stepMin, cadenceMin: cfg.cadenceMin })}`}
+        {/* Named only when the long-span budget has actually dropped a tier. The
+            reader does not need telling that the picture is its normal size; they
+            do need telling why it went soft when they reached for 24 hours. */}
+        {canLoop && plan.size !== cfg.size && ` · ${plan.size.replace('x', '×')}`}
         {usable.length > 0 && ` · ${staleness.message}`}
         {' · '}
         <a href={goesLatestUrl({ view, band, size: cfg.size })} target="_blank" rel="noreferrer">

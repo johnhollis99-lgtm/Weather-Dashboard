@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DECODED_BUDGET_BYTES,
+  DURATION_PRESETS,
   FRAME_COUNT,
   FULL_DISK,
   GOES_VIEWS,
+  MAX_FRAMES,
   alignToSlot,
   buildGoesFrames,
   dayOfYearUTC,
+  decodedBytes,
+  defaultDurationH,
   describeLoop,
   goesFrameUrl,
+  planLoop,
   goesLatestUrl,
   goesStamp,
   parseGoesStamp,
@@ -123,6 +129,182 @@ describe('frame construction', () => {
 
   it('returns nothing for a view the CDN does not publish', () => {
     expect(buildGoesFrames({ now: NOW, view: 'nope', band: 'GEOCOLOR' })).toEqual([]);
+  });
+});
+
+describe('buildGoesFrames — additive stepMin and size', () => {
+  // The whole point of the two parameters being optional: a call that omits them
+  // must build the window this function built before they existed, object for
+  // object. If this drifts, the duration control has silently changed the
+  // default loop.
+  it('is byte-identical to the previous signature when both are omitted', () => {
+    for (const view of Object.keys(GOES_VIEWS)) {
+      for (const band of ['GEOCOLOR', '08', '13']) {
+        const cfg = GOES_VIEWS[view];
+        expect(buildGoesFrames({ now: NOW, view, band })).toEqual(
+          buildGoesFrames({ now: NOW, view, band, stepMin: cfg.cadenceMin, size: cfg.size }),
+        );
+      }
+    }
+  });
+
+  it('still produces exactly the frames the panel shipped before the control', () => {
+    // Pinned literally, not by formula, so a change to planLoop cannot quietly
+    // redefine what "unchanged" means.
+    const frames = buildGoesFrames({ now: NOW, view: 'psw', band: 'GEOCOLOR' });
+    expect(frames).toHaveLength(FRAME_COUNT);
+    expect(frames[0].stamp).toBe('20262240316');
+    expect(frames.at(-1).stamp).toBe('20262240411');
+    expect(frames.at(-1).url).toBe(
+      'https://cdn.star.nesdis.noaa.gov/GOES18/ABI/SECTOR/psw/GEOCOLOR/' +
+        '20262240411_GOES18-ABI-psw-GEOCOLOR-600x600.jpg',
+    );
+  });
+
+  it('anchors the newest frame to the CADENCE slot, never to the step', () => {
+    // Aligning to an hourly step would date the leading frame up to an hour back
+    // even with a four-minute-old scan on the CDN — discarding the freshness the
+    // window is deliberately built to keep.
+    const native = buildGoesFrames({ now: NOW, view: 'psw', band: '08' });
+    const hourly = buildGoesFrames({ now: NOW, view: 'psw', band: '08', stepMin: 60, count: 6 });
+    expect(hourly.at(-1).stamp).toBe(native.at(-1).stamp);
+    expect(hourly.at(-1).time).toBe(native.at(-1).time);
+  });
+
+  it('lands every decimated frame on a real scan boundary', () => {
+    // Steps are whole multiples of the cadence, so `newest - i × step` stays on
+    // the view's published phase. This is the invariant the 404-pruning design
+    // would otherwise have to absorb as a wall of missing frames.
+    for (const view of Object.keys(GOES_VIEWS)) {
+      const cfg = GOES_VIEWS[view];
+      for (const h of DURATION_PRESETS) {
+        const p = planLoop({ view, durationH: h });
+        for (const f of buildGoesFrames({ now: NOW, view, band: '08', ...p })) {
+          const min = new Date(f.time).getUTCMinutes();
+          expect((min - cfg.phaseMin + 60) % cfg.cadenceMin).toBe(0);
+          expect(parseGoesStamp(f.stamp)).toBe(f.time);
+        }
+      }
+    }
+  });
+
+  it('puts the requested size in the url and steps at the requested interval', () => {
+    const f = buildGoesFrames({
+      now: NOW,
+      view: 'psw',
+      band: 'GEOCOLOR',
+      count: 3,
+      stepMin: 60,
+      size: '300x300',
+    });
+    expect(f.map((x) => x.stamp)).toEqual(['20262240211', '20262240311', '20262240411']);
+    expect(f[0].url).toContain('300x300.jpg');
+    expect((f[1].time - f[0].time) / 60_000).toBe(60);
+  });
+});
+
+describe('loop planning', () => {
+  // The §1 ladder and §2 tiers, pinned as tables. These are the numbers the
+  // design was signed off on; a rule change that moves any cell should have to
+  // say so here.
+  const PLAN_5MIN = [
+    // durationH, stepMin, count, size, decoded MB
+    [1, 5, 12, '600x600'],
+    [3, 5, 36, '600x600'],
+    [6, 5, 72, '300x300'],
+    [12, 10, 72, '300x300'],
+    [24, 15, 96, '300x300'],
+    [48, 30, 96, '300x300'],
+    [72, 60, 72, '300x300'],
+  ];
+  const PLAN_10MIN = [
+    [1, 10, 6, '500x500'],
+    [3, 10, 18, '500x500'],
+    [6, 10, 36, '500x500'],
+    [12, 10, 72, '250x250'],
+    [24, 20, 72, '250x250'],
+    [48, 30, 96, '250x250'],
+    [72, 60, 72, '250x250'],
+  ];
+  const PLAN_FD = [
+    [1, 10, 6, '678x678'],
+    [3, 10, 18, '678x678'],
+    // 36 × 678² × 4 = 66.2 MB, inside the 70 MB budget by 5% — the full disk
+    // keeps its resolution at six hours, which is why the budget is 70 and not 64.
+    [6, 10, 36, '678x678'],
+    [12, 10, 72, '339x339'],
+    [24, 20, 72, '339x339'],
+    [48, 30, 96, '339x339'],
+    [72, 60, 72, '339x339'],
+  ];
+
+  it.each([
+    ['psw', PLAN_5MIN],
+    ['pnw', PLAN_5MIN],
+    ['wus', PLAN_10MIN],
+    [FULL_DISK, PLAN_FD],
+  ])('resolves every rung for %s', (view, table) => {
+    for (const [durationH, stepMin, count, size] of table) {
+      expect(planLoop({ view, durationH })).toEqual({
+        durationH,
+        stepMin,
+        count,
+        size,
+        spanMin: (count - 1) * stepMin,
+      });
+    }
+  });
+
+  it('never exceeds the frame ceiling or the decode budget', () => {
+    for (const view of Object.keys(GOES_VIEWS)) {
+      for (const durationH of DURATION_PRESETS) {
+        const p = planLoop({ view, durationH });
+        expect(p.count).toBeLessThanOrEqual(MAX_FRAMES);
+        expect(decodedBytes(p.size, p.count)).toBeLessThanOrEqual(DECODED_BUDGET_BYTES);
+      }
+    }
+  });
+
+  it('only ever picks a step that is a whole multiple of the view cadence', () => {
+    // The invariant every decimated frame URL depends on.
+    for (const view of Object.keys(GOES_VIEWS)) {
+      for (const durationH of DURATION_PRESETS) {
+        expect(planLoop({ view, durationH }).stepMin % GOES_VIEWS[view].cadenceMin).toBe(0);
+      }
+    }
+  });
+
+  it('keeps native cadence for as long as the frame ceiling allows', () => {
+    // Short spans should not be decimated just because long ones must be.
+    expect(planLoop({ view: 'psw', durationH: 6 }).stepMin).toBe(5);
+    expect(planLoop({ view: 'wus', durationH: 12 }).stepMin).toBe(10);
+  });
+
+  it('returns nothing for a view the CDN does not publish', () => {
+    expect(planLoop({ view: 'nope', durationH: 24 })).toBeNull();
+  });
+
+  it('opens each view on the first rung at least as dense as the old loop', () => {
+    // One hour is twelve frames on a 5-minute sector but only six on the
+    // 10-minute views, so a flat default would open the full disk on half a loop.
+    expect(defaultDurationH('psw')).toBe(1);
+    expect(defaultDurationH('pnw')).toBe(1);
+    expect(defaultDurationH('wus')).toBe(3);
+    expect(defaultDurationH(FULL_DISK)).toBe(3);
+    for (const view of Object.keys(GOES_VIEWS)) {
+      expect(planLoop({ view, durationH: defaultDurationH(view) }).count).toBeGreaterThanOrEqual(
+        FRAME_COUNT,
+      );
+    }
+  });
+
+  it('opens the 5-minute sectors on exactly the window they had before', () => {
+    // The default rung must reproduce the shipped loop, not merely resemble it.
+    const p = planLoop({ view: 'psw', durationH: defaultDurationH('psw') });
+    expect(p).toMatchObject({ stepMin: GOES_VIEWS.psw.cadenceMin, count: FRAME_COUNT });
+    expect(buildGoesFrames({ now: NOW, view: 'psw', band: '08', ...p })).toEqual(
+      buildGoesFrames({ now: NOW, view: 'psw', band: '08' }),
+    );
   });
 });
 
