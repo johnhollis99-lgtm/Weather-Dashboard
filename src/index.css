@@ -336,6 +336,12 @@ body.wx-standalone #root { min-height: 100vh; }
   .wx-dash .sat-frame { transition: opacity 60ms linear; }
 }
 
+/* Degraded frame coverage. Caption tier — the count is emphasised, the sentence
+   is not, because the loop is still usable and this is a footnote about how much
+   of the window survived rather than a warning about what it shows. */
+.wx-dash .sat-degraded { margin-top: 6px; }
+.wx-dash .sat-degraded strong { color: var(--warn); font-weight: 600; }
+
 .wx-dash .timeline { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .wx-dash .timeline input[type=range] { flex: 1; }
 .wx-dash .frame-label { font-size: 12px; color: var(--text-dim); min-width: 150px; }

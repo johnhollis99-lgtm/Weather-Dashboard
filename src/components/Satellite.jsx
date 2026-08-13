@@ -44,6 +44,25 @@ const BANDS = [
 
 const FRAME_MS = 450; // a little quicker than radar's 600 — satellite motion is slower
 
+// Fewest surviving frames that still constitute a LOOP rather than a picture.
+//
+// One constant, used by both the "this is a still picture" error and the gate on
+// the animation interval, because those two previously disagreed: the error
+// rendered below 3 frames while the interval kept running at 2, so the panel
+// said "still picture, not a loop — do not read motion into it" over imagery
+// that was visibly alternating. Anything that reads this threshold must read
+// THIS name, so the message and the motion cannot drift apart again.
+const MIN_LOOP_FRAMES = 3;
+
+// How many missing frames are ordinary rather than a signal.
+//
+// The newest one or two slots are routinely not published yet — the CDN runs
+// 3–5 minutes behind the scan time and GEOCOLOR renders slower still, so a
+// 10-or-11-of-12 window is the healthy steady state, not a fault. Losing MORE
+// than that is the case worth surfacing: a product rename or a sector going
+// dark would otherwise show up only as a quietly shorter loop.
+const EXPECTED_MISSING = 2;
+
 // Live media-query hook, matching RadarPanel and WindDial: a preference change
 // is honoured without a reload.
 function usePrefersReducedMotion() {
@@ -112,13 +131,22 @@ export default function Satellite({ location, refreshKey }) {
 
   const safeIdx = Math.min(idx, Math.max(0, usable.length - 1));
 
+  // "Is this a loop?" — asked once, here, and read by everything that has an
+  // opinion about it: the animation interval, the Play control's label and its
+  // disabled state, and whether the caption is allowed to call the window a
+  // loop. Previously each of those decided separately and they disagreed, so
+  // the panel could say "still picture, not a loop" above imagery that was
+  // visibly alternating, beside a caption advertising a "5-min loop".
+  const canLoop = settled && usable.length >= MIN_LOOP_FRAMES;
+
   // Animate only once every candidate has resolved, so the loop cannot stutter
-  // through frames that are still downloading.
+  // through frames that are still downloading, and only when there are enough
+  // frames to be a loop at all.
   useEffect(() => {
-    if (!playing || !settled || usable.length < 2) return;
+    if (!playing || !canLoop) return;
     const t = setInterval(() => setIdx((i) => (i + 1) % usable.length), FRAME_MS);
     return () => clearInterval(t);
-  }, [playing, settled, usable.length]);
+  }, [playing, canLoop, usable.length]);
 
   // A preference change mid-session pauses a running loop.
   useEffect(() => {
@@ -134,6 +162,9 @@ export default function Satellite({ location, refreshKey }) {
   });
   const stale = staleness.level === 'stale';
   const span = usable.length > 1 ? Math.round((usable.at(-1).time - usable[0].time) / 60_000) : 0;
+  // Meaningful only once `settled`, which is the only place it is read: before
+  // that, an unanswered frame is still in flight rather than missing.
+  const missing = frames.length - usable.length;
   const sub = fullDisk ? 'GOES-18 · Full Disk (~16 km)' : `GOES-18 · sector "${sector}" (~4 km)`;
 
   return (
@@ -165,13 +196,13 @@ export default function Satellite({ location, refreshKey }) {
           band may have stopped publishing — there is <strong>no imagery</strong> below.
         </div>
       )}
-      {settled && usable.length > 0 && usable.length < 3 && (
+      {settled && usable.length > 0 && usable.length < MIN_LOOP_FRAMES && (
         <div className="state error">
           ⚠ Only {usable.length} of {frames.length} frames loaded. This is a still
           picture, not a loop — do not read motion into it.
         </div>
       )}
-      {settled && usable.length >= 3 && stale && (
+      {settled && usable.length >= MIN_LOOP_FRAMES && stale && (
         <div className="state error">
           ⚠ <strong>Imagery is stale.</strong> {staleness.message}
         </div>
@@ -210,10 +241,15 @@ export default function Satellite({ location, refreshKey }) {
         <button
           type="button"
           onClick={() => setPlaying((p) => !p)}
-          disabled={!settled || usable.length < 2}
+          disabled={!canLoop}
           title={settled ? undefined : 'Buffering frames…'}
         >
-          {playing ? '⏸ Pause' : '▶ Play'}
+          {/* Reads the ACTUAL state, not the intent. `playing` stays true across
+              a window that drops below the loop threshold — it is the reader's
+              standing preference, and it should survive so the loop resumes when
+              frames come back — but rendering "⏸ Pause" over a motionless still
+              would describe something that is not happening. */}
+          {playing && canLoop ? '⏸ Pause' : '▶ Play'}
         </button>
         <input
           type="range"
@@ -234,9 +270,27 @@ export default function Satellite({ location, refreshKey }) {
         </span>
       </div>
 
+      {/* Degraded-but-usable loop. Deliberately a caption below the imagery
+          rather than a banner above it: the loop still works and still means
+          what it says, so this is a footnote about coverage, not a warning
+          about validity. The hard error above owns the case where it stops
+          being a loop at all. Without this line, losing a third of the window
+          reads only as a quietly shorter loop — which is what a product rename
+          or a sector going dark would look like. */}
+      {settled && usable.length >= MIN_LOOP_FRAMES && missing > EXPECTED_MISSING && (
+        <div className="obs-note sat-degraded">
+          Running <strong>{usable.length} of {frames.length}</strong> frames — {missing} were
+          unavailable from the CDN.
+        </div>
+      )}
+
       <div className="obs-note">
         GOES-18 ABI imagery © NOAA/NESDIS/STAR
-        {usable.length > 1 && ` · ${span}-min loop at ${cfg.cadenceMin}-min scans`}
+        {/* Gated on canLoop, not on `> 1`: two surviving frames do span five
+            minutes, but advertising "a 5-min loop" here while the error above
+            calls the same imagery a still picture is the panel contradicting
+            itself in its own footnote. */}
+        {canLoop && ` · ${span}-min loop at ${cfg.cadenceMin}-min scans`}
         {usable.length > 0 && ` · ${staleness.message}`}
         {' · '}
         <a href={goesLatestUrl({ view, band, size: cfg.size })} target="_blank" rel="noreferrer">
