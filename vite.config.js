@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { buildStamp } from './scripts/buildInfo.mjs';
 
 // The Express proxy runs on 3001. We forward /api/* to it so the browser only
 // ever talks same-origin — this is how the SPC mesoanalysis + UWyo sounding
@@ -13,6 +14,14 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: process.env.CONDUCTOR_BUILD === 'true' ? '/weather/' : '/',
   plugins: [react()],
+  // Which commit this bundle was built from, baked in at build time so it
+  // travels with the assets. The Conductor embed serves these files statically
+  // from /weather/, with no server of ours behind them — a runtime fetch for
+  // provenance would fail precisely in the vendored copy where "what is this
+  // build?" is hardest to answer by other means. See scripts/buildInfo.mjs.
+  define: {
+    __APP_BUILD__: JSON.stringify(buildStamp()),
+  },
   server: {
     port: 5173,
     strictPort: false,

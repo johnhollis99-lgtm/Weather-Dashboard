@@ -12,6 +12,7 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readProvenance } from '../scripts/buildInfo.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, '..', 'dist');
@@ -60,8 +61,25 @@ async function pipeImage(res, url, label, extraHeaders = {}) {
 // Routes
 // ---------------------------------------------------------------------------
 
+// Health + provenance. `build.app` answers "which commit is this deploy
+// running?" in one curl — the question that previously took reading hashed
+// bundle names and grepping minified JS, while production sat three commits
+// stale. Read once at boot: it cannot change without a restart, and shelling
+// out to git per request would be absurd.
+//
+// `startedAt`, not `builtAt`: this process did not build dist/ (a separate step
+// did, possibly elsewhere), so boot time is the only timestamp it can report
+// honestly. The bundle carries its own `builtAt`; see scripts/buildInfo.mjs.
+//
+// This SHA attests to the commit THIS SERVER PROCESS booted from. The footer
+// reports the commit its BUNDLE was built from. They are independent claims: if
+// the two disagree, dist/ and the server came from different commits — a
+// half-applied deploy, which is exactly the failure this pair exists to catch.
+// Keep both; neither is redundant with the other.
+const BUILD = { startedAt: new Date().toISOString(), app: readProvenance() };
+
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'wx-dashboard-proxy', port: PORT });
+  res.json({ ok: true, service: 'wx-dashboard-proxy', port: PORT, build: BUILD });
 });
 
 // SPC convective + fire-weather outlook images (now served as .png).

@@ -450,6 +450,12 @@ body.wx-standalone #root { min-height: 100vh; }
 .wx-dash .footer { padding: 20px 18px 40px; color: var(--text-faint); font-size: 12px; line-height: 1.6; border-top: 1px solid var(--border); margin-top: 20px; }
 .wx-dash .footer strong { color: var(--text-dim); }
 .wx-dash .disclaimer { color: var(--watch); margin-top: 8px; }
+/* Build provenance. Deliberately the quietest thing in the footer: it is how you
+   check WHICH build you are looking at, not something to read while forecasting. */
+.wx-dash .build-stamp { margin-top: 8px; color: var(--text-faint); }
+/* Plain mono, not --font-data: the design system reserves that face for values
+   the reader is meant to compare, and a build SHA is not one of them. */
+.wx-dash .build-stamp code { font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-dim); }
 
 /* ---- Diagnostic Skew-T (DiagnosticSounding) ---------------------------------
    Component-scoped tokens so the chart reads on BOTH dark and light surfaces.

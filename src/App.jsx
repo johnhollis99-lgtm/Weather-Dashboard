@@ -4,6 +4,7 @@ import { reverseGeocode } from './api/geocoding.js';
 import { computeDiagnostics, summarize18h } from './lib/diagnostics.js';
 import { assessHazards, briefing } from './lib/analysis.js';
 import { computeEnsembleDays, confidenceSummary } from './lib/ensemble.js';
+import { BUILD_DATE, BUILD_LABEL } from './lib/buildInfo.js';
 import {
   getPoints,
   getForecast,
@@ -320,6 +321,19 @@ export default function App() {
           RainViewer · Iowa State Mesonet (NEXRAD N0Q) · NOAA/NESDIS/STAR GOES-18 · Zoom Earth (satellite &amp; storms) ·
           Windy.com (radar/wind/waves embeds) · Tropical Tidbits (model maps) · NOAA SPC (convective &amp; fire-weather
           outlooks) · Caltrans QuickMap · Nevada DOT 511.
+        </div>
+        {/* Which commit is actually running. Production once sat three commits
+            stale with nothing in the UI to say so; this is the one-glance answer.
+            Faint tier deliberately — it is provenance, not weather data.
+
+            This SHA attests to the commit THIS BUNDLE was built from, baked in at
+            build time. /api/health reports the commit the SERVER process booted
+            from. They are independent claims: if the two disagree, the frontend
+            and the backend came from different commits — a half-applied deploy.
+            Keep both; neither is redundant with the other. */}
+        <div className="build-stamp">
+          Build <code>{BUILD_LABEL}</code>
+          {BUILD_DATE && ` · ${BUILD_DATE}`}
         </div>
         <div>
           SPC outlooks, model maps, and NDOT 511 are routed through the bundled local Express proxy so they render
