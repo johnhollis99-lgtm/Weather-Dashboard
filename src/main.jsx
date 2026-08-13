@@ -35,6 +35,27 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 //
 // Proactively remove any service worker a prior production build already installed,
 // so returning visitors drop the old SW on their next load (runs in dev and prod).
-if ('serviceWorker' in navigator) {
+//
+// STANDALONE ONLY. The guard is load-bearing — do not "simplify" it away.
+//
+// getRegistrations() is scoped to the ORIGIN, not to this app's path. Conductor
+// serves this dashboard same-origin from /weather/, so when this runs there the
+// list it iterates is CONDUCTOR'S: its own service worker, registered at /sw.js
+// with scope /, unregistered on every open of the weather module — silently
+// costing the host its offline shell and installability until its next full page
+// load, since it only re-registers on a top-level load.
+//
+// It cannot be fixed by filtering. Conductor registers the same '/sw.js' path and
+// therefore gets the same default scope '/', so on that origin the two
+// registrations are identical in scriptURL and in scope and nothing at runtime
+// says which is ours. The guard has to be a build-time one.
+//
+// BASE_URL is '/weather/' under `npm run build:conductor` and '/' otherwise, so
+// this reads "am I served from a subpath" as a proxy for "am I embedded". The two
+// coincide today because one CONDUCTOR_BUILD flag sets both. The proxy also fails
+// in the safe direction: a wrong answer here can only skip a cleanup, never
+// unregister a host's worker — that would need BASE_URL === '/' while embedded,
+// which the Conductor build cannot produce.
+if (import.meta.env.BASE_URL === '/' && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
 }
