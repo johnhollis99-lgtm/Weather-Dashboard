@@ -154,14 +154,47 @@ export function buildGoesFrames({ now, view, band, count = FRAME_COUNT }) {
  * How old the newest frame may be before the loop is calling itself current
  * under false pretences.
  *
- * Cadence-relative, not a flat number: a missed scan on the 10-minute full disk
+ * Interval-relative, not a flat number: a missed scan on the 10-minute full disk
  * is ordinary at an age that would be genuinely alarming on the 5-minute
- * sectors. Two cadences of slack plus the CDN's own publish latency.
+ * sectors. Two intervals of slack plus the CDN's own publish latency.
+ *
+ * The interval is the loop's STEP, which equals the view's scan cadence only
+ * while the loop runs natively. A loop that samples one slot per hour has a
+ * newest frame up to an hour old BY CONSTRUCTION — judged against psw's
+ * 5-minute cadence it would trip the stale banner on every render, turning the
+ * panel's most severe state into noise. `stepMin` therefore defaults to the
+ * cadence, which is exactly what a native-cadence caller means and reproduces
+ * the previous behaviour for every existing one-argument call.
  */
-export function staleThresholdMin(view) {
+export function staleThresholdMin(view, stepMin) {
   const cfg = GOES_VIEWS[view];
-  if (!cfg) return 20;
-  return cfg.cadenceMin * 2 + 10;
+  const step = stepMin ?? cfg?.cadenceMin;
+  if (step == null) return 20;
+  return step * 2 + 10;
+}
+
+/** Above this span, minutes stop being a unit anyone can read at a glance. */
+const SPAN_MIN_AS_HOURS = 120;
+
+/**
+ * The loop's one-line account of its own shape.
+ *
+ * Three things a template literal in the panel got wrong the moment the window
+ * stopped being one hour long: a multi-day span rendered as four thousand
+ * minutes; the interval quoted was the view's scan cadence rather than the
+ * interval the loop actually samples at; and those two are the same number only
+ * while the loop is native. "at 5-min scans" beside 60-minute steps advertises
+ * imagery the reader is not being shown — the same class of self-contradiction
+ * the surrounding panel was reworked to eliminate, so the cadence is named only
+ * when the loop is genuinely running at it.
+ */
+export function describeLoop({ spanMin, stepMin, cadenceMin }) {
+  const span =
+    spanMin >= SPAN_MIN_AS_HOURS
+      ? `${Math.round((spanMin / 60) * 10) / 10}-h`
+      : `${spanMin}-min`;
+  const rate = stepMin === cadenceMin ? `${cadenceMin}-min scans` : `${stepMin}-min steps`;
+  return `${span} loop at ${rate}`;
 }
 
 // --- load bookkeeping --------------------------------------------------------

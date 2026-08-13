@@ -6,6 +6,7 @@ import {
   alignToSlot,
   buildGoesFrames,
   dayOfYearUTC,
+  describeLoop,
   goesFrameUrl,
   goesLatestUrl,
   goesStamp,
@@ -168,6 +169,89 @@ describe('staleness threshold', () => {
 
   it('falls back to a sane number for an unknown view', () => {
     expect(staleThresholdMin('nope')).toBe(20);
+  });
+});
+
+describe('staleness threshold — step relative', () => {
+  // The threshold judges the newest frame against the interval the loop SAMPLES
+  // at, which is the scan cadence only while the loop is native. These tests
+  // exist to pin the default: the second argument was added for decimated loops
+  // and must leave every existing one-argument call exactly where it was.
+  it('defaults to the view cadence, so every current call is byte-identical', () => {
+    for (const [view, cfg] of Object.entries(GOES_VIEWS)) {
+      expect(staleThresholdMin(view)).toBe(cfg.cadenceMin * 2 + 10);
+      expect(staleThresholdMin(view)).toBe(staleThresholdMin(view, cfg.cadenceMin));
+    }
+    // Belt and braces: the literal numbers the panel ships today.
+    expect(staleThresholdMin('psw')).toBe(20);
+    expect(staleThresholdMin('pnw')).toBe(20);
+    expect(staleThresholdMin('wus')).toBe(30);
+    expect(staleThresholdMin(FULL_DISK)).toBe(30);
+  });
+
+  it('follows the step once the loop is decimated below native cadence', () => {
+    // The defect this replaces: an hourly-step psw loop has a newest frame up to
+    // 60 minutes old by construction, and the cadence-derived 20-minute
+    // threshold called that stale on every single render.
+    expect(staleThresholdMin('psw', 60)).toBe(130);
+    expect(staleThresholdMin('psw', 15)).toBe(40);
+    expect(staleThresholdMin(FULL_DISK, 30)).toBe(70);
+  });
+
+  it('still falls back for an unknown view only when no step is given', () => {
+    expect(staleThresholdMin('nope')).toBe(20);
+    expect(staleThresholdMin('nope', 60)).toBe(130);
+  });
+});
+
+describe('loop description', () => {
+  // Reproduces `${span}-min loop at ${cadenceMin}-min scans`, the template this
+  // replaced, for every window the panel can currently build.
+  it('is verbatim identical to the caption the panel ships today', () => {
+    for (const view of Object.keys(GOES_VIEWS)) {
+      const f = buildGoesFrames({ now: NOW, view, band: 'GEOCOLOR' });
+      const spanMin = (f.at(-1).time - f[0].time) / 60_000;
+      const cad = GOES_VIEWS[view].cadenceMin;
+      expect(describeLoop({ spanMin, stepMin: cad, cadenceMin: cad })).toBe(
+        `${spanMin}-min loop at ${cad}-min scans`,
+      );
+    }
+    expect(describeLoop({ spanMin: 55, stepMin: 5, cadenceMin: 5 })).toBe(
+      '55-min loop at 5-min scans',
+    );
+    expect(describeLoop({ spanMin: 110, stepMin: 10, cadenceMin: 10 })).toBe(
+      '110-min loop at 10-min scans',
+    );
+  });
+
+  it('names the scan cadence only while the loop is running at it', () => {
+    // Quoting "5-min scans" over hourly steps describes imagery that is not on
+    // screen — the panel contradicting itself in its own footnote.
+    expect(describeLoop({ spanMin: 4260, stepMin: 60, cadenceMin: 5 })).toBe(
+      '71-h loop at 60-min steps',
+    );
+    expect(describeLoop({ spanMin: 1425, stepMin: 15, cadenceMin: 5 })).toBe(
+      '23.8-h loop at 15-min steps',
+    );
+  });
+
+  it('switches to hours only once minutes stop being legible', () => {
+    expect(describeLoop({ spanMin: 119, stepMin: 5, cadenceMin: 5 })).toBe(
+      '119-min loop at 5-min scans',
+    );
+    expect(describeLoop({ spanMin: 120, stepMin: 5, cadenceMin: 5 })).toBe(
+      '2-h loop at 5-min scans',
+    );
+  });
+
+  it('keeps one decimal for a span that is not a whole number of hours', () => {
+    // 72 native psw frames span 355 minutes, not a round six hours.
+    expect(describeLoop({ spanMin: 355, stepMin: 5, cadenceMin: 5 })).toBe(
+      '5.9-h loop at 5-min scans',
+    );
+    expect(describeLoop({ spanMin: 720, stepMin: 10, cadenceMin: 10 })).toBe(
+      '12-h loop at 10-min scans',
+    );
   });
 });
 

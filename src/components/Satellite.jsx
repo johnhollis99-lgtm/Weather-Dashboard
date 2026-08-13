@@ -6,6 +6,7 @@ import {
   FULL_DISK,
   GOES_VIEWS,
   buildGoesFrames,
+  describeLoop,
   goesLatestUrl,
   pruneFrameStatus,
   staleThresholdMin,
@@ -289,8 +290,10 @@ export default function Satellite({ location, refreshKey }) {
         {/* Gated on canLoop, not on `> 1`: two surviving frames do span five
             minutes, but advertising "a 5-min loop" here while the error above
             calls the same imagery a still picture is the panel contradicting
-            itself in its own footnote. */}
-        {canLoop && ` · ${span}-min loop at ${cfg.cadenceMin}-min scans`}
+            itself in its own footnote. describeLoop owns the wording, including
+            which interval is the honest one to quote. */}
+        {canLoop &&
+          ` · ${describeLoop({ spanMin: span, stepMin: cfg.cadenceMin, cadenceMin: cfg.cadenceMin })}`}
         {usable.length > 0 && ` · ${staleness.message}`}
         {' · '}
         <a href={goesLatestUrl({ view, band, size: cfg.size })} target="_blank" rel="noreferrer">
